@@ -5,6 +5,8 @@ import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "expert_profiles")
 @Getter
@@ -21,20 +23,26 @@ public class ExpertProfile extends BaseTimeEntity {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(name = "office_name", length = 100)
-    private String officeName;
-
-    @Column(length = 100)
+    @Column(nullable = false, length = 100)
     private String specialty;
 
-    @Column(name = "career_years")
-    private Integer careerYears;
+    @Column(name = "business_name", length = 100)
+    private String businessName;
 
-    @Column(columnDefinition = "TEXT")
-    private String introduction;
+    @Column(name = "experience_years", nullable = false)
+    private Integer experienceYears;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "verification_status", nullable = false, length = 20)
+    @Column(name = "portfolio_description", columnDefinition = "TEXT")
+    private String portfolioDescription;
+
+    @Column(name = "is_verified", nullable = false)
     @Builder.Default
-    private VerificationStatus verificationStatus = VerificationStatus.PENDING;
+    private Boolean isVerified = false;
+
+    @Column(name = "selected_count", nullable = false)
+    @Builder.Default
+    private Integer selectedCount = 0;
+
+    @Column(name = "verified_at")
+    private LocalDateTime verifiedAt;
 }

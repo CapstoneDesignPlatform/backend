@@ -18,23 +18,28 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
-    private String email;
-
-    @Column(name = "password_hash", nullable = false, length = 255)
-    private String passwordHash;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "user_type", nullable = false, length = 20)
+    private UserType userType;
 
     @Column(nullable = false, length = 50)
     private String name;
 
+    @Column(nullable = false, unique = true, length = 100)
+    private String email;
+
     @Column(nullable = false, length = 20)
     private String phone;
 
-    @Column(nullable = false, length = 20)
-    private String role;
+    @Column(name = "password", length = 255)
+    private String password;
 
-    @Column(nullable = false, length = 20)
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "social_provider", length = 20)
+    private SocialProvider socialProvider;
+
+    @Column(name = "social_id", length = 100)
+    private String socialId;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

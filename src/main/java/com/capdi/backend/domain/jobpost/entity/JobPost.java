@@ -1,16 +1,12 @@
 package com.capdi.backend.domain.jobpost.entity;
 
-import com.capdi.backend.domain.company.entity.Company;
+import com.capdi.backend.domain.announcement.entity.Announcement;
+import com.capdi.backend.domain.client.entity.ClientInfo;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
-/**
- * 공고 엔티티
- * 기업이 등록하는 의뢰 공고 정보를 저장한다.
- */
 
 @Entity
 @Table(name = "job_posts")
@@ -26,23 +22,43 @@ public class JobPost {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "company_id", nullable = false)
-    private Company company;
+    @JoinColumn(name = "client_id", nullable = false)
+    private ClientInfo clientInfo;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "announcement_code", referencedColumnName = "announcement_code", nullable = false)
+    private Announcement announcement;
 
     @Column(nullable = false, length = 200)
     private String title;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, length = 100)
+    private String category;
+
+    @Column(name = "license_type", nullable = false, length = 100)
+    private String licenseType;
+
+    @Column(name = "work_type", nullable = false, length = 100)
+    private String workType;
+
+    @Column(name = "client_type", nullable = false, length = 50)
+    private String clientType;
+
+    @Column(nullable = false, precision = 15, scale = 2)
+    private BigDecimal budget;
+
+    @Column(length = 100)
+    private String region;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false)
-    private Long budget;
-
-    @Column(nullable = false)
-    private LocalDate deadline;
+    @Column(name = "bid_deadline")
+    private LocalDateTime bidDeadline;
 
     @Column(nullable = false, length = 20)
-    private String status;
+    @Builder.Default
+    private String status = "OPEN";
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
