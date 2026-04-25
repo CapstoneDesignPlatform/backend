@@ -1,9 +1,9 @@
-FROM eclipse-temurin:21-jre
-
-WORKDIR /app
-
-COPY build/libs/*.jar app.jar
-
-ENTRYPOINT ["java", \
-  "-Djava.security.egd=file:/dev/./urandom", \
-  "-jar", "app.jar"]
+#FROM eclipse-temurin:21-jre
+#
+#WORKDIR /app
+#
+#COPY build/libs/*.jar app.jar
+#
+#ENTRYPOINT ["java", \
+#  "-Djava.security.egd=file:/dev/./urandom", \
+#  "-jar", "app.jar"]
