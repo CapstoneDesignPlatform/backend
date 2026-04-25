@@ -1,142 +1,146 @@
-#services:
-##  nginx:
-##    image: nginx:1.27-alpine
-##    container_name: capdi-nginx
-##    ports:
-##      - "80:80"
-##    volumes:
-##      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-##    depends_on:
-##      - backend-blue
-##      - backend-green
-##    networks:
-##      - capdi-net
-#
-#  backend-blue:
-#    build:
-#      context: .
-#      dockerfile: Dockerfile
-#    container_name: capdi-backend-blue
-#    environment:
-#      SPRING_PROFILES_ACTIVE: blue
-#      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capdi_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-#      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-#      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-#      TZ: Asia/Seoul
-#    depends_on:
-#      mysql:
-#        condition: service_healthy
-#    networks:
-#      - capdi-net
-#    volumes:
-#      - ./logs/blue:/app/logs/blue
-#
-#  backend-green:
-#    build:
-#      context: .
-#      dockerfile: Dockerfile
-#    container_name: capdi-backend-green
-#    environment:
-#      SPRING_PROFILES_ACTIVE: green
-#      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capdi_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-#      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
-#      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-#      TZ: Asia/Seoul
-#    depends_on:
-#      mysql:
-#        condition: service_healthy
-#    networks:
-#      - capdi-net
-#    volumes:
-#      - ./logs/green:/app/logs/green
-#
-#  mysql:
-#    image: mysql:8.4
-#    container_name: capdi-mysql
-#    restart: always
-#    environment:
-#      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-#      MYSQL_DATABASE: capdi_db
-#      TZ: Asia/Seoul
-#    ports:
-#      - "3307:3306"
-#    volumes:
-#      - mysql_data:/var/lib/mysql
-#    healthcheck:
-#      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 10
-#    networks:
-#      - capdi-net
-#
-#  prometheus:
-#    image: prom/prometheus:latest
-#    container_name: capdi-prometheus
-#    ports:
-#      - "9090:9090"
-#    volumes:
-#      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-#    depends_on:
-#      - backend-blue
-#      - backend-green
-#    networks:
-#      - capdi-net
-#
-#  grafana:
-#    image: grafana/grafana:latest
-#    container_name: capdi-grafana
-#    ports:
-#      - "3000:3000"
-#    environment:
-#      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
-#      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
-#    volumes:
-#      - grafana_data:/var/lib/grafana
-#      - ./infra/grafana/provisioning:/etc/grafana/provisioning
-#    depends_on:
-#      - prometheus
-#      - loki
-#    networks:
-#      - capdi-net
-#
-#  loki:
-#    image: grafana/loki:2.9.8
-#    container_name: capdi-loki
-#    ports:
-#      - "3100:3100"
-#    command: -config.file=/etc/loki/local-config.yaml
-#    volumes:
-#      - ./infra/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
-#      - loki_data:/loki
-#    networks:
-#      - capdi-net
-#
-#  promtail:
-#    image: grafana/promtail:2.9.8
-#    container_name: capdi-promtail
-#    command: -config.file=/etc/promtail/config.yml
-#    volumes:
-#      - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
-#      - ./logs:/logs:ro
-#    depends_on:
-#      - loki
-#    networks:
-#      - capdi-net
-#
-#  # redis:
-#  #   image: redis:7-alpine
-#  #   container_name: capdi-redis
-#  #   ports:
-#  #     - "6379:6379"
-#  #   networks:
-#  #     - capdi-net
-#
-#volumes:
-#  mysql_data:
-#  grafana_data:
-#  loki_data:
-#
-#networks:
-#  capdi-net:
-#    driver: bridge
+services:
+  #  nginx:
+  #    image: nginx:1.27-alpine
+  #    container_name: capdi-nginx
+  #    ports:
+  #      - "80:80"
+  #    volumes:
+  #      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #    depends_on:
+  #      - backend-blue
+  #      - backend-green
+  #    networks:
+  #      - capdi-net
+
+  backend-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capdi-backend-blue
+    environment:
+      SPRING_PROFILES_ACTIVE: blue
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capdi_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - capdi-net
+    volumes:
+      - ./logs/blue:/app/logs/blue
+
+  backend-green:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capdi-backend-green
+    environment:
+      SPRING_PROFILES_ACTIVE: green
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capdi_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - capdi-net
+    volumes:
+      - ./logs/green:/app/logs/green
+
+  mysql:
+    image: mysql:8.4
+    container_name: capdi-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: capdi_db
+      TZ: Asia/Seoul
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - capdi-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: capdi-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - backend-blue
+      - backend-green
+    networks:
+      - capdi-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: capdi-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - capdi-net
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: capdi-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - capdi-net
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    container_name: capdi-promtail
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./infra/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - ./logs:/logs:ro
+    depends_on:
+      - loki
+    networks:
+      - capdi-net
+
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: capdi-redis
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - capdi-net
+
+volumes:
+  mysql_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  capdi-net:
+    driver: bridge
