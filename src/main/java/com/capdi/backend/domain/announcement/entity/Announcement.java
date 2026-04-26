@@ -64,8 +64,7 @@ public class Announcement {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    @Builder.Default
-    private AnnouncementStatusEnum status = AnnouncementStatusEnum.IN_PROGRESS;
+    private AnnouncementStatusEnum status;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -73,8 +72,5 @@ public class Announcement {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-        if (this.status == null) {
-            this.status = AnnouncementStatusEnum.IN_PROGRESS;
-        }
     }
 }
