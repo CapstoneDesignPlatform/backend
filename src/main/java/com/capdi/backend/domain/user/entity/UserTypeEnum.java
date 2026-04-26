@@ -1,6 +1,6 @@
 package com.capdi.backend.domain.user.entity;
 
-public enum UserType {
+public enum UserTypeEnum {
     CLIENT,
     EXPERT,
     MANAGER

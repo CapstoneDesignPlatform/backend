@@ -41,7 +41,7 @@ public class Bid extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
-    private BidStatus status = BidStatus.PENDING;
+    private BidStatusEnum status = BidStatusEnum.PENDING;
 
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;

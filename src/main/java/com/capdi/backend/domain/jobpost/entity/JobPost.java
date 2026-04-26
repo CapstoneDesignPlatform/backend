@@ -35,14 +35,17 @@ public class JobPost {
     @Column(nullable = false, length = 100)
     private String category;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "license_type", nullable = false, length = 100)
-    private String licenseType;
+    private LicenseTypeEnum licenseType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "work_type", nullable = false, length = 100)
-    private String workType;
+    private WorkTypeEnum workType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "client_type", nullable = false, length = 50)
-    private String clientType;
+    private ClientTypeEnum clientType;
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal budget;
@@ -56,9 +59,10 @@ public class JobPost {
     @Column(name = "bid_deadline")
     private LocalDateTime bidDeadline;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "OPEN";
+    private JobPostStatusEnum status = JobPostStatusEnum.OPEN;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -73,7 +77,7 @@ public class JobPost {
         this.updatedAt = now;
 
         if (this.status == null) {
-            this.status = "OPEN";
+            this.status = JobPostStatusEnum.OPEN;
         }
     }
 

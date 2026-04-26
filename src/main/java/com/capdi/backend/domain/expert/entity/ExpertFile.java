@@ -36,8 +36,9 @@ public class ExpertFile {
     @Column(name = "mime_type", nullable = false, length = 100)
     private String mimeType;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "file_type", nullable = false, length = 30)
-    private String fileType;
+    private FileTypeEnum fileType;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

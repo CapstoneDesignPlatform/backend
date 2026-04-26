@@ -34,6 +34,7 @@ public class ExpertCertificate extends BaseTimeEntity {
     @Column(name = "expired_at")
     private LocalDate expiredAt;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "certificate_type_code", nullable = false, length = 30)
-    private String certificateTypeCode;
+    private CertificateTypeCodeEnum certificateTypeCode;
 }

@@ -30,8 +30,9 @@ public class Inquiry {
     @Column(nullable = false, length = 20)
     private String phone;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "inquiry_type", nullable = false, length = 50)
-    private String inquiryType;
+    private InquiryTypeEnum inquiryType;
 
     @Column(nullable = false, length = 200)
     private String title;

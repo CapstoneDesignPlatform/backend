@@ -1,6 +1,6 @@
 package com.capdi.backend.domain.user.entity;
 
-public enum SocialProvider {
+public enum SocialProviderEnum {
     KAKAO,
     NAVER,
     GOOGLE

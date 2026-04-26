@@ -37,8 +37,9 @@ public class Announcement {
     @Column(nullable = false, length = 100)
     private String purpose;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "business_owner_type", nullable = false, length = 50)
-    private String businessOwnerType;
+    private BusinessOwnerTypeEnum businessOwnerType;
 
     @Column(nullable = false, length = 50)
     private String category;
@@ -61,9 +62,10 @@ public class Announcement {
     @Column(name = "diagnosis_reason_detail", columnDefinition = "TEXT")
     private String diagnosisReasonDetail;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "IN_PROGRESS";
+    private AnnouncementStatusEnum status = AnnouncementStatusEnum.IN_PROGRESS;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -72,7 +74,7 @@ public class Announcement {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         if (this.status == null) {
-            this.status = "IN_PROGRESS";
+            this.status = AnnouncementStatusEnum.IN_PROGRESS;
         }
     }
 }

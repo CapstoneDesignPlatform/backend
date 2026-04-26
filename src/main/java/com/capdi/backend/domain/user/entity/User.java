@@ -6,7 +6,15 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(
+        name = "users",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_users_social_provider_social_id",
+                        columnNames = {"social_provider", "social_id"}
+                )
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -20,12 +28,12 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type", nullable = false, length = 20)
-    private UserType userType;
+    private UserTypeEnum userType;
 
     @Column(nullable = false, length = 50)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String email;
 
     @Column(nullable = false, length = 20)
@@ -36,7 +44,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "social_provider", length = 20)
-    private SocialProvider socialProvider;
+    private SocialProviderEnum socialProvider;
 
     @Column(name = "social_id", length = 100)
     private String socialId;
