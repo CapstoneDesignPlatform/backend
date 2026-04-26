@@ -3,6 +3,9 @@ package com.capdi.backend.domain.announcement.dto;
 import com.capdi.backend.domain.announcement.entity.Announcement;
 import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
 import com.capdi.backend.domain.announcement.entity.BusinessOwnerTypeEnum;
+import com.capdi.backend.domain.announcement.entity.JobTypeEnum;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -11,6 +14,7 @@ import java.time.LocalDateTime;
 
 @Getter
 @Builder
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class AnnouncementResponse {
 
     private Long id;
@@ -22,6 +26,8 @@ public class AnnouncementResponse {
     private BusinessOwnerTypeEnum businessOwnerType;
     private String category;
     private String currentIndustry;
+    private String currentLicense;
+    private JobTypeEnum jobType;
     private String requiredLicense;
     private BigDecimal assetScale;
     private LocalDateTime deadline;
@@ -41,6 +47,8 @@ public class AnnouncementResponse {
                 .businessOwnerType(announcement.getBusinessOwnerType())
                 .category(announcement.getCategory())
                 .currentIndustry(announcement.getCurrentIndustry())
+                .currentLicense(announcement.getCurrentLicense())
+                .jobType(announcement.getJobType())
                 .requiredLicense(announcement.getRequiredLicense())
                 .assetScale(announcement.getAssetScale())
                 .deadline(announcement.getDeadline())

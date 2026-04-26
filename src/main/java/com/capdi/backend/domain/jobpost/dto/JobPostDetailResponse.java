@@ -1,7 +1,6 @@
 package com.capdi.backend.domain.jobpost.dto;
 
 import com.capdi.backend.domain.announcement.entity.Announcement;
-import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
 import com.capdi.backend.domain.announcement.entity.BusinessOwnerTypeEnum;
 import com.capdi.backend.domain.announcement.entity.JobTypeEnum;
 import com.capdi.backend.domain.client.entity.ClientInfo;
@@ -16,7 +15,7 @@ import java.time.LocalDateTime;
 
 @Getter
 @Builder
-public class JobPostResponse {
+public class JobPostDetailResponse {
 
     private Long id;
 
@@ -60,19 +59,23 @@ public class JobPostResponse {
     @JsonProperty("posted_at")
     private LocalDateTime postedAt;
 
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
+
     @JsonProperty("is_new")
     private boolean isNew;
 
     private JobPostStatusEnum status;
+    private CompanyResponse company;
 
-    @JsonProperty("has_my_bid")
-    private boolean hasMyBid;
+    @JsonProperty("my_bid")
+    private Object myBid;
 
-    public static JobPostResponse from(JobPost jobPost, long bidCount, boolean hasMyBid) {
+    public static JobPostDetailResponse from(JobPost jobPost, long bidCount) {
         Announcement announcement = jobPost.getAnnouncement();
         ClientInfo clientInfo = jobPost.getClientInfo();
 
-        return JobPostResponse.builder()
+        return JobPostDetailResponse.builder()
                 .id(jobPost.getId())
                 .companyId(clientInfo == null ? null : clientInfo.getId())
                 .companyName(clientInfo == null ? null : clientInfo.getCompanyName())
@@ -89,9 +92,11 @@ public class JobPostResponse {
                 .assetScaleLabel(announcement == null ? null : announcement.getAssetScale())
                 .bidCount(bidCount)
                 .postedAt(jobPost.getCreatedAt())
+                .createdAt(jobPost.getCreatedAt())
                 .isNew(isNew(jobPost.getCreatedAt()))
                 .status(jobPost.getStatus())
-                .hasMyBid(hasMyBid)
+                .company(CompanyResponse.from(clientInfo))
+                .myBid(null)
                 .build();
     }
 
@@ -110,5 +115,28 @@ public class JobPostResponse {
 
     private static boolean isNew(LocalDateTime postedAt) {
         return postedAt != null && postedAt.isAfter(LocalDateTime.now().minusDays(3));
+    }
+
+    @Getter
+    @Builder
+    public static class CompanyResponse {
+
+        private Long id;
+        private String name;
+        private String representative;
+        private String location;
+
+        private static CompanyResponse from(ClientInfo clientInfo) {
+            if (clientInfo == null) {
+                return null;
+            }
+
+            return CompanyResponse.builder()
+                    .id(clientInfo.getId())
+                    .name(clientInfo.getCompanyName())
+                    .representative(clientInfo.getRepresentativeName())
+                    .location(clientInfo.getAddress())
+                    .build();
+        }
     }
 }

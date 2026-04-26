@@ -47,6 +47,13 @@ public class Announcement {
     @Column(name = "current_industry", length = 100)
     private String currentIndustry;
 
+    @Column(name = "current_license", length = 100)
+    private String currentLicense;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "job_type", nullable = false, length = 30)
+    private JobTypeEnum jobType;
+
     @Column(name = "required_license", columnDefinition = "TEXT")
     private String requiredLicense;
 
