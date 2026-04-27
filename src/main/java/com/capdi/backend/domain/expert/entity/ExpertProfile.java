@@ -45,4 +45,33 @@ public class ExpertProfile extends BaseTimeEntity {
 
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
+
+    public void updateProfile(String businessName, String specialty, String portfolioDescription) {
+        if (businessName != null) {
+            this.businessName = businessName;
+        }
+
+        if (specialty != null) {
+            this.specialty = specialty;
+        }
+
+        if (portfolioDescription != null) {
+            this.portfolioDescription = portfolioDescription;
+        }
+    }
+    public void applyVerification(String licenseType, String companyName, String portfolio) {
+
+        if (licenseType != null) {
+            this.specialty = licenseType;
+        }
+
+        if (companyName != null) {
+            this.businessName = companyName;
+        }
+
+        if (portfolio != null) {
+            this.portfolioDescription = portfolio;
+        }
+    }
+
 }
