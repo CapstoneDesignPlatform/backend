@@ -47,6 +47,13 @@ public class Announcement {
     @Column(name = "current_industry", length = 100)
     private String currentIndustry;
 
+    @Column(name = "current_license", length = 100)
+    private String currentLicense;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "job_type", nullable = false, length = 30)
+    private JobTypeEnum jobType;
+
     @Column(name = "required_license", columnDefinition = "TEXT")
     private String requiredLicense;
 
@@ -64,8 +71,7 @@ public class Announcement {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    @Builder.Default
-    private AnnouncementStatusEnum status = AnnouncementStatusEnum.IN_PROGRESS;
+    private AnnouncementStatusEnum status;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -73,8 +79,5 @@ public class Announcement {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-        if (this.status == null) {
-            this.status = AnnouncementStatusEnum.IN_PROGRESS;
-        }
     }
 }

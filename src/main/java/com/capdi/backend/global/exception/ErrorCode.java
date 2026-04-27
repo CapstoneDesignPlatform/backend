@@ -23,6 +23,7 @@ public enum ErrorCode {
 
     // 공고
     ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 공고입니다."),
+    JOB_POST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 잡포스트입니다."),
     ANNOUNCEMENT_CLOSED(HttpStatus.BAD_REQUEST, "마감된 공고입니다."),
     ANNOUNCEMENT_FORBIDDEN(HttpStatus.FORBIDDEN, "공고에 대한 권한이 없습니다."),
 

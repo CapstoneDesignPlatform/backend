@@ -61,8 +61,7 @@ public class JobPost {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    @Builder.Default
-    private JobPostStatusEnum status = JobPostStatusEnum.OPEN;
+    private JobPostStatusEnum status;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -76,9 +75,6 @@ public class JobPost {
         this.createdAt = now;
         this.updatedAt = now;
 
-        if (this.status == null) {
-            this.status = JobPostStatusEnum.OPEN;
-        }
     }
 
     @PreUpdate
