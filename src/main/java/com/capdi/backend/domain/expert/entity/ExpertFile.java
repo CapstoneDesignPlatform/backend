@@ -4,6 +4,9 @@ import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+import com.capdi.backend.global.entity.BaseTimeEntity;
+
 @Entity
 @Table(name = "files")
 @Getter

@@ -1,8 +1,10 @@
 package com.capdi.backend.domain.user.entity;
 
-import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.LocalDateTime;
+import com.capdi.backend.global.entity.BaseTimeEntity;
 
 @Entity
 @Table(
@@ -46,4 +48,14 @@ public class User extends BaseTimeEntity {
 
     @Column(name = "social_id", length = 100)
     private String socialId;
+
+    public void updateBasicInfo(String name, String phone) {
+        if (name != null) {
+            this.name = name;
+        }
+
+        if (phone != null) {
+            this.phone = phone;
+        }
+    }
 }
