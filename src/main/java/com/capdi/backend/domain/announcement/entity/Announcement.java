@@ -2,6 +2,7 @@ package com.capdi.backend.domain.announcement.entity;
 
 import com.capdi.backend.domain.client.entity.ClientInfo;
 import com.capdi.backend.domain.user.entity.User;
+import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-public class Announcement {
+public class Announcement extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -72,12 +73,4 @@ public class Announcement {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AnnouncementStatusEnum status;
-
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-    }
 }

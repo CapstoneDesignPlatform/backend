@@ -2,6 +2,7 @@ package com.capdi.backend.domain.jobpost.entity;
 
 import com.capdi.backend.domain.announcement.entity.Announcement;
 import com.capdi.backend.domain.client.entity.ClientInfo;
+import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -11,11 +12,10 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "job_posts")
 @Getter
-@Setter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-public class JobPost {
+public class JobPost extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,23 +62,4 @@ public class JobPost {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private JobPostStatusEnum status;
-
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
 }
