@@ -38,9 +38,6 @@ public class AuthService {
         if (request.getUserType() == UserTypeEnum.ADMIN) {
             throw new CustomException(ErrorCode.INVALID_SIGNUP_ROLE);
         }
-        if (!request.getPassword().equals(request.getPasswordConfirm())) {
-            throw new CustomException(ErrorCode.PASSWORD_MISMATCH);
-        }
         String email = request.getEmail().toLowerCase();
         if (userRepository.existsByEmail(email)) {
             throw new CustomException(ErrorCode.EMAIL_ALREADY_EXISTS);
