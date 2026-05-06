@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
     updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_admin_accounts_user_id (user_id)
-    );
+);
 
 CREATE TABLE IF NOT EXISTS admin_logs (
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS admin_logs (
     description TEXT NULL,
     created_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id)
-    );
+);
 
 CREATE TABLE IF NOT EXISTS reports (
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS reports (
     updated_at DATETIME(6) NULL,
     PRIMARY KEY (id),
     KEY idx_reports_status (status)
-    );
+);
 
 CREATE TABLE IF NOT EXISTS user_sanctions (
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS user_sanctions (
     ended_at DATETIME(6) NULL,
     created_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id)
-    );
+);
 
 CREATE TABLE IF NOT EXISTS notifications (
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -61,4 +61,4 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
     KEY idx_notifications_receiver_user_id (receiver_user_id)
-    );
+);
