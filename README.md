@@ -171,3 +171,45 @@ refactor: UserService 트랜잭션 분리
 chore: build.gradle 의존성 추가
 docs: README 코드 컨벤션 작성
 ```
+
+
+이슈 컨벤션
+이슈 타입 (Label)
+라벨설명예시feat새로운 기능 개발사용자 로그인 API 구현fix버그 수정입찰 금액 유효성 검사 오류refactor코드 리팩토링UserService 트랜잭션 분리chore빌드, 설정, 의존성 등build.gradle 의존성 추가docs문서 작성 / 수정README 코드 컨벤션 작성test테스트 코드 작성UserService 단위 테스트 추가
+
+이슈 제목
+[타입] 작업 내용 요약
+예시
+[feat] 사용자 로그인 API 구현
+[fix] 입찰 금액 유효성 검사 오류 수정
+[refactor] UserService 트랜잭션 분리
+
+이슈 본문 템플릿
+markdown## 📋 작업 개요
+> 이 이슈에서 무엇을 구현/수정하는지 간략히 설명
+
+## ✅ 작업 내용
+- [ ] 세부 작업 1
+- [ ] 세부 작업 2
+- [ ] 세부 작업 3
+
+## 🔗 관련 이슈
+- closes #이슈번호 (있는 경우)
+
+## 📎 참고 사항
+> API 명세, ERD, 디자인 링크 등 참고할 내용 (없으면 생략)
+
+PR 연결 규칙
+
+PR 제목은 이슈 제목과 동일하게 작성
+PR 본문에 closes #이슈번호 를 명시해 자동 이슈 닫기 활성화
+PR은 반드시 dev 브랜치로 머지
+
+
+브랜치 ↔ 이슈 연결
+브랜치명에 이슈 번호를 포함해 추적을 용이하게 한다.
+feat/이슈번호-작업명
+fix/이슈번호-작업명
+예시
+feat/23-user-login
+fix/47-bid-price-validation
