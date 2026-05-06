@@ -1,8 +1,6 @@
 package com.capdi.backend.domain.jobpost.dto;
 
-import com.capdi.backend.domain.announcement.entity.Announcement;
-import com.capdi.backend.domain.announcement.entity.BusinessOwnerTypeEnum;
-import com.capdi.backend.domain.announcement.entity.JobTypeEnum;
+import com.capdi.backend.domain.announcement.entity.*;
 import com.capdi.backend.domain.client.entity.ClientInfo;
 import com.capdi.backend.domain.jobpost.entity.JobPost;
 import com.capdi.backend.domain.jobpost.entity.JobPostStatusEnum;
@@ -26,7 +24,7 @@ public class JobPostDetailResponse {
     private String companyName;
 
     private String title;
-    private String industry;
+    private IndustryTypeEnum industry;
 
     @JsonProperty("job_type")
     private JobTypeEnum jobType;
@@ -43,12 +41,12 @@ public class JobPostDetailResponse {
     private String requiredLicense;
 
     @JsonProperty("current_industry")
-    private String currentIndustry;
+    private CurrentIndustryStatusEnum currentIndustry;
 
     @JsonProperty("current_license")
     private String currentLicense;
 
-    private String reason;
+    private DiagnosisReasonEnum reason;
 
     @JsonProperty("asset_scale_label")
     private BigDecimal assetScaleLabel;
@@ -84,7 +82,9 @@ public class JobPostDetailResponse {
                 .jobType(announcement == null ? null : announcement.getJobType())
                 .jobTypeLabel(resolveJobTypeLabel(announcement == null ? null : announcement.getJobType()))
                 .businessType(announcement == null ? null : announcement.getBusinessOwnerType())
-                .classification(announcement == null ? jobPost.getCategory() : announcement.getCategory())
+                .classification(announcement == null
+                        ? jobPost.getCategory()
+                        : (announcement.getCategory() == null ? null : announcement.getCategory().name()))
                 .requiredLicense(announcement == null ? null : announcement.getRequiredLicense())
                 .currentIndustry(announcement == null ? null : announcement.getCurrentIndustry())
                 .currentLicense(announcement == null ? null : announcement.getCurrentLicense())
