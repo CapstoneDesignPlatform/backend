@@ -19,9 +19,9 @@ CREATE TABLE IF NOT EXISTS client_info (
     representative_name VARCHAR(50) NOT NULL,
     contact VARCHAR(20) NOT NULL,
     email VARCHAR(100) NOT NULL,
-    company_name VARCHAR(100) NOT NULL,
-    business_number VARCHAR(30) NOT NULL,
-    address VARCHAR(255) NOT NULL,
+    company_name VARCHAR(100) NULL,
+    business_number VARCHAR(30) NULL,
+    address VARCHAR(255) NULL,
     website VARCHAR(255) NULL,
     capital DECIMAL(15, 2) NULL,
     founded_date DATE NULL,
@@ -53,20 +53,22 @@ CREATE TABLE IF NOT EXISTS announcement (
     user_id BIGINT NULL,
     client_info_id BIGINT NOT NULL,
     announcement_code VARCHAR(50) NOT NULL,
-    industry VARCHAR(100) NOT NULL,
-    purpose VARCHAR(100) NOT NULL,
-    business_owner_type VARCHAR(50) NULL,
-    category VARCHAR(50) NOT NULL,
-    current_industry VARCHAR(100) NULL,
+    industry VARCHAR(50) NOT NULL,
+    purpose VARCHAR(50) NOT NULL,
+    business_owner_type VARCHAR(50) NOT NULL,
+    category VARCHAR(50) NULL,
+    current_industry VARCHAR(50) NULL,
+    current_industry_detail TEXT NULL,
     current_license VARCHAR(100) NULL,
-    job_type VARCHAR(30) NULL,
+    job_type VARCHAR(30) NOT NULL,
     required_license TEXT NULL,
     asset_scale DECIMAL(15, 2) NULL,
-    deadline DATETIME(6) NOT NULL,
-    diagnosis_reason VARCHAR(50) NOT NULL,
+    deadline DATETIME(6) NULL,
+    diagnosis_reason VARCHAR(50) NULL,
     diagnosis_reason_detail TEXT NULL,
-    status VARCHAR(20) NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_announcement_code (announcement_code)
 );
@@ -113,8 +115,9 @@ CREATE TABLE IF NOT EXISTS inquiry (
     title VARCHAR(200) NOT NULL,
     content TEXT NOT NULL,
     answer TEXT NULL,
-    created_at DATETIME(6) NOT NULL,
     answered_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -141,6 +144,7 @@ CREATE TABLE IF NOT EXISTS files (
     mime_type VARCHAR(100) NOT NULL,
     file_type VARCHAR(30) NULL,
     created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id)
 );
 

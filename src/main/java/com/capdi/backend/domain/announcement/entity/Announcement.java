@@ -7,7 +7,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "announcement")
@@ -23,7 +22,7 @@ public class Announcement extends BaseTimeEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
-    private User user;
+    private User user;  // 비회원이면 null
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "client_info_id", nullable = false)
@@ -32,45 +31,58 @@ public class Announcement extends BaseTimeEntity {
     @Column(name = "announcement_code", nullable = false, unique = true, length = 50)
     private String announcementCode;
 
-    @Column(nullable = false, length = 100)
-    private String industry;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private IndustryTypeEnum industry;
 
-    @Column(nullable = false, length = 100)
-    private String purpose;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private AnnouncementPurposeEnum purpose;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "business_owner_type", nullable = false, length = 50)
     private BusinessOwnerTypeEnum businessOwnerType;
 
-    @Column(nullable = false, length = 50)
-    private String category;
+    // 필요 면허 탭 전용 (실태조사는 null)
+    @Enumerated(EnumType.STRING)
+    @Column(length = 50)
+    private AnnouncementCategoryEnum category;
 
-    @Column(name = "current_industry", length = 100)
-    private String currentIndustry;
+    // 필요 면허 탭 전용
+    @Enumerated(EnumType.STRING)
+    @Column(name = "current_industry", length = 50)
+    private CurrentIndustryStatusEnum currentIndustry;
 
+    // 건설업관련/비건설업관련 선택 시 상세 내용
+    @Column(name = "current_industry_detail", columnDefinition = "TEXT")
+    private String currentIndustryDetail;
+
+    // 실태 조사 탭 전용 (보유 면허)
     @Column(name = "current_license", length = 100)
     private String currentLicense;
 
+    // purpose → jobType 자동 매핑
     @Enumerated(EnumType.STRING)
     @Column(name = "job_type", nullable = false, length = 30)
     private JobTypeEnum jobType;
 
+    // 필요 면허 탭 전용 (필요한 면허)
     @Column(name = "required_license", columnDefinition = "TEXT")
     private String requiredLicense;
 
     @Column(name = "asset_scale", precision = 15, scale = 2)
-    private BigDecimal assetScale;
+    private BigDecimal assetScale;  // 억원 단위
 
-    @Column(nullable = false)
-    private LocalDateTime deadline;
-
-    @Column(name = "diagnosis_reason", nullable = false, length = 50)
-    private String diagnosisReason;
+    // 기타 탭 전용
+    @Enumerated(EnumType.STRING)
+    @Column(name = "diagnosis_reason", length = 50)
+    private DiagnosisReasonEnum diagnosisReason;
 
     @Column(name = "diagnosis_reason_detail", columnDefinition = "TEXT")
     private String diagnosisReasonDetail;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private AnnouncementStatusEnum status;
+    private AnnouncementStatusEnum status = AnnouncementStatusEnum.ACTIVE;
 }
