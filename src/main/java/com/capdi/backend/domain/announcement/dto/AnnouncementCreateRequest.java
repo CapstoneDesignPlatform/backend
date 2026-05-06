@@ -1,6 +1,7 @@
 package com.capdi.backend.domain.announcement.dto;
 
 import com.capdi.backend.domain.announcement.entity.*;
+import com.capdi.backend.domain.announcement.validation.ValidPurposeDependentFields;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -9,6 +10,7 @@ import java.math.BigDecimal;
 
 @Getter
 @NoArgsConstructor
+@ValidPurposeDependentFields
 public class AnnouncementCreateRequest {
 
     //공통 필드
