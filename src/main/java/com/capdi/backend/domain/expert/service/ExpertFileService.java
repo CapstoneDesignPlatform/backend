@@ -4,6 +4,8 @@ import com.capdi.backend.domain.expert.dto.ExpertFileDownloadUrlResponse;
 import com.capdi.backend.domain.expert.dto.ExpertFileUploadResponse;
 import com.capdi.backend.domain.expert.entity.ExpertFile;
 import com.capdi.backend.domain.expert.entity.ExpertProfile;
+import com.capdi.backend.domain.expert.entity.FileTypeEnum;
+import com.capdi.backend.domain.expert.entity.MimeTypeEnum;
 import com.capdi.backend.domain.expert.repository.ExpertFileRepository;
 import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
 import com.capdi.backend.global.exception.CustomException;
@@ -14,7 +16,6 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import com.capdi.backend.domain.expert.entity.FileTypeEnum;
 
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -38,6 +39,7 @@ public class ExpertFileService {
         validateUploadRequest(file, purpose);
 
         ExpertProfile expertProfile = getMyExpertProfile();
+        MimeTypeEnum mimeType = parseMimeType(file);
 
         try {
             Path uploadDir = Paths.get(UPLOAD_DIR);
@@ -55,7 +57,7 @@ public class ExpertFileService {
                     .storedName(storedName)
                     .filePath(savePath.toString())
                     .fileSize(file.getSize())
-                    .mimeType(file.getContentType())
+                    .mimeType(mimeType)
                     .fileType(FileTypeEnum.valueOf(purpose))
                     .build();
 
@@ -97,6 +99,14 @@ public class ExpertFileService {
         }
 
         if (!"EXPERT_VERIFICATION".equals(purpose)) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
+    }
+
+    private MimeTypeEnum parseMimeType(MultipartFile file) {
+        try {
+            return MimeTypeEnum.from(file.getContentType(), file.getOriginalFilename());
+        } catch (IllegalArgumentException e) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
     }
