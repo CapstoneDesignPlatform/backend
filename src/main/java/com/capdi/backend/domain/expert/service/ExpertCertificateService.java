@@ -24,8 +24,8 @@ public class ExpertCertificateService {
     private final ExpertFileRepository expertFileRepository;
 
     @Transactional
-    public ExpertCertificateResponse createMyCertificate(ExpertCertificateCreateRequest request) {
-        ExpertProfile expertProfile = getMyExpertProfile();
+    public ExpertCertificateResponse createMyCertificate(Long loginUserId, ExpertCertificateCreateRequest request) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
         ExpertFile file = getOwnedFile(request.getFileId(), expertProfile);
         ExpertCertificate expertCertificate = createCertificate(request, expertProfile, file);
 
@@ -64,14 +64,8 @@ public class ExpertCertificateService {
         return file;
     }
 
-    private ExpertProfile getMyExpertProfile() {
-        Long loginUserId = getLoginUserId();
-
+    private ExpertProfile getMyExpertProfile(Long loginUserId) {
         return expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
-    }
-
-    private Long getLoginUserId() {
-        return 1L; // TODO: JWT 적용 후 auth context에서 가져오기
     }
 }

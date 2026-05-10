@@ -19,14 +19,14 @@ public class ExpertProfileService {
 
     private final ExpertProfileRepository expertProfileRepository;
 
-    public ExpertProfileResponse getMyProfile() {
-        ExpertProfile expertProfile = getMyExpertProfile();
+    public ExpertProfileResponse getMyProfile(Long loginUserId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
         return ExpertProfileResponse.from(expertProfile);
     }
 
     @Transactional
-    public ExpertProfileResponse updateMyProfile(ExpertProfileUpdateRequest request) {
-        ExpertProfile expertProfile = getMyExpertProfile();
+    public ExpertProfileResponse updateMyProfile(Long loginUserId, ExpertProfileUpdateRequest request) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
 
         String specialty = null;
         if (request.getExpertiseAreas() != null && !request.getExpertiseAreas().isEmpty()) {
@@ -47,14 +47,14 @@ public class ExpertProfileService {
         return ExpertProfileResponse.from(expertProfile);
     }
 
-    public ExpertVerificationStatusResponse getMyVerificationStatus() {
-        ExpertProfile expertProfile = getMyExpertProfile();
+    public ExpertVerificationStatusResponse getMyVerificationStatus(Long loginUserId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
         return ExpertVerificationStatusResponse.from(expertProfile);
     }
 
     @Transactional
-    public void applyVerification(ExpertVerificationRequest request) {
-        ExpertProfile expertProfile = getMyExpertProfile();
+    public void applyVerification(Long loginUserId, ExpertVerificationRequest request) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
 
         expertProfile.applyVerification(
                 request.getLicenseType(),
@@ -63,14 +63,8 @@ public class ExpertProfileService {
         );
     }
 
-    private ExpertProfile getMyExpertProfile() {
-        Long loginUserId = getLoginUserId();
-
+    private ExpertProfile getMyExpertProfile(Long loginUserId) {
         return expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
-    }
-
-    private Long getLoginUserId() {
-        return 1L; // TODO: JWT 적용 후 auth context에서 가져오기
     }
 }

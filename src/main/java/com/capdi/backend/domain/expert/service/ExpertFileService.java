@@ -35,10 +35,10 @@ public class ExpertFileService {
     private final ExpertProfileRepository expertProfileRepository;
 
     @Transactional
-    public ExpertFileUploadResponse uploadFile(MultipartFile file, String purpose) {
+    public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
         validateUploadRequest(file, purpose);
 
-        ExpertProfile expertProfile = getMyExpertProfile();
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
         MimeTypeEnum mimeType = parseMimeType(file);
 
         try {
@@ -58,7 +58,7 @@ public class ExpertFileService {
                     .filePath(savePath.toString())
                     .fileSize(file.getSize())
                     .mimeType(mimeType)
-                    .fileType(FileTypeEnum.valueOf(purpose))
+                    .fileType(parseFileType(purpose))
                     .build();
 
             ExpertFile savedFile = expertFileRepository.save(expertFile);
@@ -70,13 +70,15 @@ public class ExpertFileService {
         }
     }
 
-    public ExpertFileDownloadUrlResponse getDownloadUrl(Long fileId) {
-        ExpertFile expertFile = getExpertFile(fileId);
+    public ExpertFileDownloadUrlResponse getDownloadUrl(Long loginUserId, Long fileId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        ExpertFile expertFile = getOwnedFile(fileId, expertProfile);
         return ExpertFileDownloadUrlResponse.from(expertFile);
     }
 
-    public Resource downloadFile(Long fileId) {
-        ExpertFile expertFile = getExpertFile(fileId);
+    public Resource downloadFile(Long loginUserId, Long fileId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        ExpertFile expertFile = getOwnedFile(fileId, expertProfile);
 
         try {
             Path filePath = Paths.get(expertFile.getFilePath()).toAbsolutePath().normalize();
@@ -98,7 +100,13 @@ public class ExpertFileService {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
 
-        if (!"EXPERT_VERIFICATION".equals(purpose)) {
+        parseFileType(purpose);
+    }
+
+    private FileTypeEnum parseFileType(String purpose) {
+        try {
+            return FileTypeEnum.from(purpose);
+        } catch (IllegalArgumentException e) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
     }
@@ -111,9 +119,7 @@ public class ExpertFileService {
         }
     }
 
-    private ExpertProfile getMyExpertProfile() {
-        Long loginUserId = getLoginUserId();
-
+    private ExpertProfile getMyExpertProfile(Long loginUserId) {
         return expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
     }
@@ -123,7 +129,13 @@ public class ExpertFileService {
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
     }
 
-    private Long getLoginUserId() {
-        return 1L; // TODO: JWT 적용 후 auth context에서 가져오기
+    private ExpertFile getOwnedFile(Long fileId, ExpertProfile expertProfile) {
+        ExpertFile expertFile = getExpertFile(fileId);
+
+        if (!expertFile.getExpertProfile().getId().equals(expertProfile.getId())) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+
+        return expertFile;
     }
 }
