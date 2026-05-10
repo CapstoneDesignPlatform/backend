@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/expert/job-posts")
+@RequestMapping("/expert/job-posts")
 public class ExpertJobPostController {
 
     private final JobPostService jobPostService;

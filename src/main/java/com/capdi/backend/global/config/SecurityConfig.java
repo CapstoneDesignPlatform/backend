@@ -43,8 +43,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/**"
                         ).permitAll()
-                        .requestMatchers("/api/expert/**").hasRole("EXPERT")
-                        .requestMatchers("/api/files/**").hasRole("EXPERT")
+                        .requestMatchers("/expert/**").hasRole("EXPERT")
+                        .requestMatchers("/files/**").hasRole("EXPERT")
                         .anyRequest().permitAll()
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtUtil),

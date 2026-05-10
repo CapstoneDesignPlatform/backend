@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/expert/me")
+@RequestMapping("/expert/me")
 public class ExpertProfileController {
 
     private final ExpertProfileService expertProfileService;

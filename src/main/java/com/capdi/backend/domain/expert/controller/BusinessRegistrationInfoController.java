@@ -1,8 +1,8 @@
 package com.capdi.backend.domain.expert.controller;
 
-import com.capdi.backend.domain.expert.dto.ExpertCertificateCreateRequest;
-import com.capdi.backend.domain.expert.dto.ExpertCertificateResponse;
-import com.capdi.backend.domain.expert.service.ExpertCertificateService;
+import com.capdi.backend.domain.expert.dto.BusinessRegistrationInfoCreateRequest;
+import com.capdi.backend.domain.expert.dto.BusinessRegistrationInfoResponse;
+import com.capdi.backend.domain.expert.service.BusinessRegistrationInfoService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -16,18 +16,18 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/expert/me/certificates")
-public class ExpertCertificateController {
+@RequestMapping("/expert/me/business-registration-info")
+public class BusinessRegistrationInfoController {
 
-    private final ExpertCertificateService expertCertificateService;
+    private final BusinessRegistrationInfoService businessRegistrationInfoService;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<ExpertCertificateResponse>> createMyCertificate(
+    public ResponseEntity<ApiResponse<BusinessRegistrationInfoResponse>> createMyBusinessRegistrationInfo(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestBody @Valid ExpertCertificateCreateRequest request
+            @RequestBody @Valid BusinessRegistrationInfoCreateRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.ok(
-                expertCertificateService.createMyCertificate(userDetails.getUserId(), request)
+                businessRegistrationInfoService.createMyBusinessRegistrationInfo(userDetails.getUserId(), request)
         ));
     }
 }

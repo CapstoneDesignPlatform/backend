@@ -29,7 +29,7 @@ import java.util.UUID;
 public class ExpertFileService {
 
     private static final String UPLOAD_DIR =
-            System.getProperty("user.dir") + "/uploads/expert-verification";
+            System.getProperty("user.dir") + "/uploads/files"; // 파일 업로드 성공시, 업로드 디렉터리 생김 .
 
     private final ExpertFileRepository expertFileRepository;
     private final ExpertProfileRepository expertProfileRepository;

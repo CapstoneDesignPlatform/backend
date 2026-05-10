@@ -30,18 +30,34 @@ public class BusinessRegistrationInfo extends BaseTimeEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "expert_profile_id", nullable = false)
-    private ExpertProfile expertProfile; // 전문가 프로필 외래키
+    private ExpertProfile expertProfile;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "file_id", nullable = false)
-    private ExpertFile file; // 파일 테이블 외래키
+    private ExpertFile file;
 
     @Column(name = "business_number", nullable = false, length = 30)
-    private String businessNumber; // 사업자 번호
+    private String businessNumber;
 
     @Column(name = "representative_name", nullable = false, length = 100)
-    private String representativeName; // 대표자명
+    private String representativeName;
 
     @Column(name = "company_name", nullable = false, length = 100)
-    private String companyName; // 업체명
+    private String companyName;
+
+    public static BusinessRegistrationInfo create(
+            ExpertProfile expertProfile,
+            ExpertFile file,
+            String businessNumber,
+            String representativeName,
+            String companyName
+    ) {
+        return BusinessRegistrationInfo.builder()
+                .expertProfile(expertProfile)
+                .file(file)
+                .businessNumber(businessNumber)
+                .representativeName(representativeName)
+                .companyName(companyName)
+                .build();
+    }
 }
