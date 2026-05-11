@@ -4,6 +4,8 @@ import com.capdi.backend.domain.expert.dto.ExpertFileDownloadUrlResponse;
 import com.capdi.backend.domain.expert.dto.ExpertFileUploadResponse;
 import com.capdi.backend.domain.expert.entity.ExpertFile;
 import com.capdi.backend.domain.expert.entity.ExpertProfile;
+import com.capdi.backend.domain.expert.entity.FileTypeEnum;
+import com.capdi.backend.domain.expert.entity.MimeTypeEnum;
 import com.capdi.backend.domain.expert.repository.ExpertFileRepository;
 import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
 import com.capdi.backend.global.exception.CustomException;
@@ -14,7 +16,6 @@ import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import com.capdi.backend.domain.expert.entity.FileTypeEnum;
 
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -28,16 +29,17 @@ import java.util.UUID;
 public class ExpertFileService {
 
     private static final String UPLOAD_DIR =
-            System.getProperty("user.dir") + "/uploads/expert-verification";
+            System.getProperty("user.dir") + "/uploads/files"; // 파일 업로드 성공시, 업로드 디렉터리 생김 .
 
     private final ExpertFileRepository expertFileRepository;
     private final ExpertProfileRepository expertProfileRepository;
 
     @Transactional
-    public ExpertFileUploadResponse uploadFile(MultipartFile file, String purpose) {
+    public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
         validateUploadRequest(file, purpose);
 
-        ExpertProfile expertProfile = getMyExpertProfile();
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        MimeTypeEnum mimeType = parseMimeType(file);
 
         try {
             Path uploadDir = Paths.get(UPLOAD_DIR);
@@ -55,8 +57,8 @@ public class ExpertFileService {
                     .storedName(storedName)
                     .filePath(savePath.toString())
                     .fileSize(file.getSize())
-                    .mimeType(file.getContentType())
-                    .fileType(FileTypeEnum.valueOf(purpose))
+                    .mimeType(mimeType)
+                    .fileType(parseFileType(purpose))
                     .build();
 
             ExpertFile savedFile = expertFileRepository.save(expertFile);
@@ -68,13 +70,15 @@ public class ExpertFileService {
         }
     }
 
-    public ExpertFileDownloadUrlResponse getDownloadUrl(Long fileId) {
-        ExpertFile expertFile = getExpertFile(fileId);
+    public ExpertFileDownloadUrlResponse getDownloadUrl(Long loginUserId, Long fileId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        ExpertFile expertFile = getOwnedFile(fileId, expertProfile);
         return ExpertFileDownloadUrlResponse.from(expertFile);
     }
 
-    public Resource downloadFile(Long fileId) {
-        ExpertFile expertFile = getExpertFile(fileId);
+    public Resource downloadFile(Long loginUserId, Long fileId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        ExpertFile expertFile = getOwnedFile(fileId, expertProfile);
 
         try {
             Path filePath = Paths.get(expertFile.getFilePath()).toAbsolutePath().normalize();
@@ -96,14 +100,26 @@ public class ExpertFileService {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
 
-        if (!"EXPERT_VERIFICATION".equals(purpose)) {
+        parseFileType(purpose);
+    }
+
+    private FileTypeEnum parseFileType(String purpose) {
+        try {
+            return FileTypeEnum.from(purpose);
+        } catch (IllegalArgumentException e) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
     }
 
-    private ExpertProfile getMyExpertProfile() {
-        Long loginUserId = getLoginUserId();
+    private MimeTypeEnum parseMimeType(MultipartFile file) {
+        try {
+            return MimeTypeEnum.from(file.getContentType(), file.getOriginalFilename());
+        } catch (IllegalArgumentException e) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
+    }
 
+    private ExpertProfile getMyExpertProfile(Long loginUserId) {
         return expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
     }
@@ -113,7 +129,13 @@ public class ExpertFileService {
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
     }
 
-    private Long getLoginUserId() {
-        return 1L; // TODO: JWT 적용 후 auth context에서 가져오기
+    private ExpertFile getOwnedFile(Long fileId, ExpertProfile expertProfile) {
+        ExpertFile expertFile = getExpertFile(fileId);
+
+        if (!expertFile.getExpertProfile().getId().equals(expertProfile.getId())) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+
+        return expertFile;
     }
 }

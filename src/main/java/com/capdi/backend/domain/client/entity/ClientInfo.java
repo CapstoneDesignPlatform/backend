@@ -33,13 +33,13 @@ public class ClientInfo extends BaseTimeEntity {
     @Column(nullable = false, length = 100)
     private String email;
 
-    @Column(name = "company_name", nullable = false, length = 100)
+    @Column(name = "company_name", length = 100)
     private String companyName;
 
-    @Column(name = "business_number", nullable = false, length = 30)
+    @Column(name = "business_number", length = 30)
     private String businessNumber;
 
-    @Column(nullable = false, length = 255)
+    @Column(length = 255)
     private String address;
 
     @Column(length = 255)
@@ -53,4 +53,16 @@ public class ClientInfo extends BaseTimeEntity {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    public void update(String companyName, String businessNumber, String representativeName,
+                       String contact, String email, String address, String website, String description) {
+        this.companyName = companyName;
+        this.businessNumber = businessNumber;
+        this.representativeName = representativeName;
+        this.contact = contact;
+        this.email = email;
+        this.address = address;
+        this.website = website;
+        this.description = description;
+    }
 }

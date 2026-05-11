@@ -42,7 +42,7 @@ public class ExpertFileDownloadUrlResponse {
             return FileDto.builder()
                     .id(expertFile.getId())
                     .originalName(expertFile.getOriginalName())
-                    .mimeType(expertFile.getMimeType())
+                    .mimeType(expertFile.getMimeType().name())
                     .size(expertFile.getFileSize())
                     .downloadUrl("http://localhost:8081/api/files/" + expertFile.getId() + "/download")
                     .expiresAt(null)

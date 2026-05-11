@@ -19,13 +19,23 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 사용자입니다."),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
     INVALID_PASSWORD(HttpStatus.UNAUTHORIZED, "비밀번호가 올바르지 않습니다."),
+    INVALID_SIGNUP_ROLE(HttpStatus.BAD_REQUEST, "해당 역할로는 회원가입이 불가합니다."),
     EXPERT_NOT_APPROVED(HttpStatus.FORBIDDEN, "승인되지 않은 전문가입니다."),
+
+    // 토큰
+    INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
+    EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "만료된 토큰입니다."),
+    REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "리프레시 토큰을 찾을 수 없습니다."),
+    REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "리프레시 토큰이 만료되었습니다."),
 
     // 공고
     ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 공고입니다."),
     JOB_POST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 잡포스트입니다."),
     ANNOUNCEMENT_CLOSED(HttpStatus.BAD_REQUEST, "마감된 공고입니다."),
     ANNOUNCEMENT_FORBIDDEN(HttpStatus.FORBIDDEN, "공고에 대한 권한이 없습니다."),
+    CODE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "의뢰 코드 생성에 실패했습니다. 다시 시도해주세요."),
+    CURRENT_INDUSTRY_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "건설업 관련/비 건설업 관련 선택 시 상세 내용은 필수입니다."),
+    DIAGNOSIS_REASON_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "진단 사유가 기타인 경우 상세 내용은 필수입니다."),
 
     // 입찰
     BID_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 입찰입니다."),
@@ -43,7 +53,11 @@ public enum ErrorCode {
 
     // 평가
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 평가를 작성했습니다."),
-    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 평가입니다.");
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 평가입니다."),
+
+    // 기업 정보
+    CLIENT_INFO_NOT_FOUND(HttpStatus.NOT_FOUND, "기업 정보를 찾을 수 없습니다."),
+    CLIENT_INFO_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 기업 정보가 등록되어 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;
