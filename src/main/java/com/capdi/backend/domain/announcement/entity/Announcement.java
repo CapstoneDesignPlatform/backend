@@ -85,4 +85,8 @@ public class Announcement extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AnnouncementStatusEnum status = AnnouncementStatusEnum.ACTIVE;
+
+    public void updateStatus(AnnouncementStatusEnum newStatus) {
+        this.status = newStatus;
+    }
 }
