@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/files")
+@RequestMapping("/files")
 public class ExpertFileController {
 
     private final ExpertFileService expertFileService;
