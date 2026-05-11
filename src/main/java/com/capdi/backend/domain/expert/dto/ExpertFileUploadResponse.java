@@ -45,7 +45,7 @@ public class ExpertFileUploadResponse {
                     .id(expertFile.getId())
                     .originalName(expertFile.getOriginalName())
                     .storedName(expertFile.getStoredName())
-                    .mimeType(expertFile.getMimeType())
+                    .mimeType(expertFile.getMimeType().name())
                     .size(expertFile.getFileSize())
                     .purpose(expertFile.getFileType().name())
                     .createdAt(expertFile.getCreatedAt())

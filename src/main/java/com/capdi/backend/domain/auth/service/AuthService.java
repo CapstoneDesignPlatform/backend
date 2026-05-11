@@ -5,6 +5,7 @@ import com.capdi.backend.domain.auth.dto.LoginRequest;
 import com.capdi.backend.domain.auth.dto.SignupRequest;
 import com.capdi.backend.domain.auth.entity.RefreshToken;
 import com.capdi.backend.domain.auth.repository.RefreshTokenRepository;
+import com.capdi.backend.domain.expert.service.ExpertProfileProvisioningService;
 import com.capdi.backend.domain.user.entity.User;
 import com.capdi.backend.domain.user.entity.UserTypeEnum;
 import com.capdi.backend.domain.user.repository.UserRepository;
@@ -27,6 +28,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final ExpertProfileProvisioningService expertProfileProvisioningService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
@@ -50,7 +52,11 @@ public class AuthService {
                 .phone(request.getPhone())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        if (savedUser.getUserType() == UserTypeEnum.EXPERT) {
+            expertProfileProvisioningService.createDefaultProfile(savedUser);
+        }
     }
 
     @Transactional

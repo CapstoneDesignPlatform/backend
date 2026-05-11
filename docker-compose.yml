@@ -22,6 +22,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capdi_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
       TZ: Asia/Seoul
     ports:
       - "8080:8080"
@@ -43,6 +44,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capdi_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
       TZ: Asia/Seoul
     ports:
       - "8082:8082"
