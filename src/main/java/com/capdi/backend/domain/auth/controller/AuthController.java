@@ -2,6 +2,7 @@ package com.capdi.backend.domain.auth.controller;
 
 import com.capdi.backend.domain.auth.dto.AuthTokens;
 import com.capdi.backend.domain.auth.dto.LoginRequest;
+import com.capdi.backend.domain.auth.dto.LoginResponse;
 import com.capdi.backend.domain.auth.dto.SignupRequest;
 import com.capdi.backend.domain.auth.dto.TokenResponse;
 import com.capdi.backend.domain.auth.service.AuthService;
@@ -36,9 +37,9 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "로그인")
-    public ResponseEntity<ApiResponse<TokenResponse>> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthTokens tokens = authService.login(request);
-        return ResponseEntity.ok(ApiResponse.ok("로그인 성공.", TokenResponse.of(tokens)));
+        return ResponseEntity.ok(ApiResponse.ok("로그인 성공.", LoginResponse.of(tokens)));
     }
 
     @PostMapping("/refresh")
