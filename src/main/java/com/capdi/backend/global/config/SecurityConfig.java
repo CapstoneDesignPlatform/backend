@@ -1,5 +1,7 @@
 package com.capdi.backend.global.config;
 
+import com.capdi.backend.global.jwt.JwtAccessDeniedHandler;
+import com.capdi.backend.global.jwt.JwtAuthenticationEntryPoint;
 import com.capdi.backend.global.jwt.JwtAuthenticationFilter;
 import com.capdi.backend.global.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -45,7 +49,12 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/expert/**").hasRole("EXPERT")
                         .requestMatchers("/files/**").hasRole("EXPERT")
+                        .requestMatchers("/users/**").authenticated()
                         .anyRequest().permitAll()
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                        .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtUtil),
                         UsernamePasswordAuthenticationFilter.class);

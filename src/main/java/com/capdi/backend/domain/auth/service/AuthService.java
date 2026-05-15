@@ -5,6 +5,7 @@ import com.capdi.backend.domain.auth.dto.LoginRequest;
 import com.capdi.backend.domain.auth.dto.SignupRequest;
 import com.capdi.backend.domain.auth.entity.RefreshToken;
 import com.capdi.backend.domain.auth.repository.RefreshTokenRepository;
+import com.capdi.backend.domain.client.repository.ClientRepository;
 import com.capdi.backend.domain.expert.service.ExpertProfileProvisioningService;
 import com.capdi.backend.domain.user.entity.User;
 import com.capdi.backend.domain.user.entity.UserTypeEnum;
@@ -28,6 +29,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final ClientRepository clientRepository;
     private final ExpertProfileProvisioningService expertProfileProvisioningService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -72,7 +74,14 @@ public class AuthService {
         String accessToken = jwtUtil.generateToken(user.getId(), user.getUserType());
         String refreshToken = createAndSaveRefreshToken(user.getId());
 
-        return new AuthTokens(accessToken, refreshToken, user.getUserType().name());
+        Long clientInfoId = null;
+        if (user.getUserType() == UserTypeEnum.CLIENT) {
+            clientInfoId = clientRepository.findByUser_Id(user.getId())
+                    .map(c -> c.getId())
+                    .orElse(null);
+        }
+
+        return new AuthTokens(accessToken, refreshToken, user.getUserType().name(), clientInfoId);
     }
 
     @Transactional
@@ -93,7 +102,7 @@ public class AuthService {
         String newAccessToken = jwtUtil.generateToken(user.getId(), user.getUserType());
         String newRefreshToken = createAndSaveRefreshToken(user.getId());
 
-        return new AuthTokens(newAccessToken, newRefreshToken, user.getUserType().name());
+        return new AuthTokens(newAccessToken, newRefreshToken, user.getUserType().name(), null);
     }
 
     @Transactional
