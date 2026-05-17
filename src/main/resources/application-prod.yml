@@ -5,6 +5,11 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+
   jpa:
     hibernate:
       ddl-auto: none
@@ -14,13 +19,9 @@ spring:
         format_sql: false
 
 server:
-  port: 8082
+  port: 8080
 
 logging:
-  file:
-    name: /app/logs/green/application.log
-  pattern:
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   level:
     root: INFO
     com.capdi: INFO
