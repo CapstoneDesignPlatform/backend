@@ -16,8 +16,7 @@ springdoc:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
-  default-flat-param-object: true
-  pageable-to-parameters-converter-class: false
+
 
 jwt:
   secret: ${JWT_SECRET:local-test-secret-key-1234567890}
