@@ -60,4 +60,16 @@ public class BusinessRegistrationInfo extends BaseTimeEntity {
                 .companyName(companyName)
                 .build();
     }
+
+    public void update(
+            ExpertFile file,
+            String businessNumber,
+            String representativeName,
+            String companyName
+    ) {
+        this.file = file;
+        this.businessNumber = businessNumber;
+        this.representativeName = representativeName;
+        this.companyName = companyName;
+    }
 }

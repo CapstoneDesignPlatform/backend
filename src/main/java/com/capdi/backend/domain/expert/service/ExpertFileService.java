@@ -8,16 +8,22 @@ import com.capdi.backend.domain.expert.entity.FileTypeEnum;
 import com.capdi.backend.domain.expert.entity.MimeTypeEnum;
 import com.capdi.backend.domain.expert.repository.ExpertFileRepository;
 import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
+import com.capdi.backend.domain.expert.repository.BusinessRegistrationInfoRepository;
+import com.capdi.backend.domain.expert.repository.ExpertCertificateRepository;
 import com.capdi.backend.global.exception.CustomException;
 import com.capdi.backend.global.exception.ErrorCode;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.net.MalformedURLException;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,6 +32,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class ExpertFileService {
 
     private static final String UPLOAD_DIR =
@@ -33,6 +40,8 @@ public class ExpertFileService {
 
     private final ExpertFileRepository expertFileRepository;
     private final ExpertProfileRepository expertProfileRepository;
+    private final ExpertCertificateRepository expertCertificateRepository;
+    private final BusinessRegistrationInfoRepository businessRegistrationInfoRepository;
 
     @Transactional
     public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
@@ -95,6 +104,16 @@ public class ExpertFileService {
         }
     }
 
+    @Transactional
+    public void deleteReplacedFileIfUnused(ExpertFile replacedFile) {
+        if (isReferenced(replacedFile.getId())) {
+            return;
+        }
+
+        expertFileRepository.delete(replacedFile);
+        deletePhysicalFileAfterCommit(replacedFile);
+    }
+
     private void validateUploadRequest(MultipartFile file, String purpose) {
         if (file == null || file.isEmpty()) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
@@ -137,5 +156,33 @@ public class ExpertFileService {
         }
 
         return expertFile;
+    }
+
+    private boolean isReferenced(Long fileId) {
+        return expertCertificateRepository.existsByFile_Id(fileId)
+                || businessRegistrationInfoRepository.existsByFile_Id(fileId);
+    }
+
+    private void deletePhysicalFileAfterCommit(ExpertFile expertFile) {
+        Runnable deletePhysicalFile = () -> {
+            try {
+                Files.deleteIfExists(Path.of(expertFile.getFilePath()));
+            } catch (IOException e) {
+                log.warn("Failed to delete replaced file from disk. fileId={}, path={}",
+                        expertFile.getId(), expertFile.getFilePath(), e);
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deletePhysicalFile.run();
+                }
+            });
+            return;
+        }
+
+        deletePhysicalFile.run();
     }
 }

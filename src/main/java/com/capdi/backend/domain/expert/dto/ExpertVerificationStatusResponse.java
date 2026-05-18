@@ -1,11 +1,13 @@
 package com.capdi.backend.domain.expert.dto;
 
+import com.capdi.backend.domain.expert.entity.BusinessRegistrationInfo;
+import com.capdi.backend.domain.expert.entity.ExpertCertificate;
 import com.capdi.backend.domain.expert.entity.ExpertProfile;
+import com.capdi.backend.domain.expert.entity.VerificationStatusEnum;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,35 +18,34 @@ public class ExpertVerificationStatusResponse {
     @JsonProperty("verification_request")
     private VerificationRequestDto verificationRequest;
 
-    public static ExpertVerificationStatusResponse from(ExpertProfile expertProfile) {
-        boolean verified = expertProfile.getIsVerified();
-        boolean applied = expertProfile.getSpecialty() != null && !expertProfile.getSpecialty().isBlank();
-
-        String status;
-        if (verified) {
-            status = "APPROVED";
-        } else if (applied) {
-            status = "PENDING";
-        } else {
-            status = "NOT_APPLIED";
-        }
+    public static ExpertVerificationStatusResponse from(
+            ExpertProfile expertProfile,
+            List<ExpertCertificate> certificates,
+            BusinessRegistrationInfo businessRegistrationInfo
+    ) {
+        boolean applied = expertProfile.getVerificationStatus() != VerificationStatusEnum.NOT_SUBMITTED;
 
         return ExpertVerificationStatusResponse.builder()
                 .verificationRequest(VerificationRequestDto.builder()
                         .id(applied ? expertProfile.getId() : null)
-                        .status(status)
-                        .licenseType(applied ? expertProfile.getSpecialty() : null)
-                        .licenseNumber(null)
-                        .issueDate(null)
-                        .companyName(applied ? expertProfile.getBusinessName() : null)
-                        .portfolio(applied ? expertProfile.getPortfolioDescription() : null)
-                        .certificates(List.of())
-                        .businessLicense(null)
+                        .status(expertProfile.getIsVerified())
+                        .specialty(hasText(expertProfile.getSpecialty()) ? expertProfile.getSpecialty() : null)
+                        .companyName(hasText(expertProfile.getBusinessName()) ? expertProfile.getBusinessName() : null)
+                        .certificates(certificates.stream()
+                                .map(ExpertCertificateResponse::from)
+                                .toList())
+                        .businessRegistrationInfo(businessRegistrationInfo != null
+                                ? BusinessRegistrationInfoResponse.from(businessRegistrationInfo)
+                                : null)
                         .submittedAt(applied ? expertProfile.getUpdatedAt() : null)
-                        .reviewedAt(verified ? expertProfile.getVerifiedAt() : null)
+                        .reviewedAt(expertProfile.getIsVerified() ? expertProfile.getVerifiedAt() : null)
                         .rejectedReason(null)
                         .build())
                 .build();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     @Getter
@@ -53,26 +54,17 @@ public class ExpertVerificationStatusResponse {
 
         private Long id;
 
-        private String status;
+        private Boolean status;
 
-        @JsonProperty("license_type")
-        private String licenseType;
-
-        @JsonProperty("license_number")
-        private String licenseNumber;
-
-        @JsonProperty("issue_date")
-        private LocalDate issueDate;
+        private String specialty;
 
         @JsonProperty("company_name")
         private String companyName;
 
-        private String portfolio;
+        private List<ExpertCertificateResponse> certificates;
 
-        private List<Object> certificates;
-
-        @JsonProperty("business_license")
-        private Object businessLicense;
+        @JsonProperty("business_registration_info")
+        private BusinessRegistrationInfoResponse businessRegistrationInfo;
 
         @JsonProperty("submitted_at")
         private LocalDateTime submittedAt;

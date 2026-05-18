@@ -80,4 +80,22 @@ public class ExpertCertificate extends BaseTimeEntity {
                 .certificateTypeCode(certificateTypeCode)
                 .build();
     }
+
+    public void update(
+            ExpertFile file,
+            String certificateName,
+            String certificateNumber,
+            LocalDate issueDate,
+            String ownerName
+    ) {
+        CertificateTypeCodeEnum certificateTypeCode = CertificateTypeCodeEnum.fromLabel(certificateName);
+
+        this.file = file;
+        this.ownerName = ownerName;
+        this.certificateName = certificateTypeCode.getLabel();
+        this.certificateNumber = certificateNumber;
+        this.issueDate = issueDate;
+        this.expiredAt = certificateTypeCode.calculateExpiredAt(issueDate);
+        this.certificateTypeCode = certificateTypeCode;
+    }
 }

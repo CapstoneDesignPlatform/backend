@@ -64,34 +64,18 @@ public class ExpertProfile extends BaseTimeEntity {
                 .build();
     }
 
-    public void updateProfile(String businessName, String specialty, String portfolioDescription) {
+    public void updateBusinessName(String businessName) {
         if (businessName != null) {
             this.businessName = businessName;
         }
-
-        if (specialty != null) {
-            this.specialty = specialty;
-        }
-
-        if (portfolioDescription != null) {
-            this.portfolioDescription = portfolioDescription;
-        }
     }
-    public void applyVerification(String licenseType, String companyName, String portfolio) {
+    public void applyVerification(String specialty) {
         this.verificationStatus = VerificationStatusEnum.PENDING;
         this.isVerified = false;
         this.verifiedAt = null;
 
-        if (licenseType != null) {
-            this.specialty = licenseType;
-        }
-
-        if (companyName != null) {
-            this.businessName = companyName;
-        }
-
-        if (portfolio != null) {
-            this.portfolioDescription = portfolio;
+        if (specialty != null) {
+            this.specialty = specialty;
         }
     }
 
