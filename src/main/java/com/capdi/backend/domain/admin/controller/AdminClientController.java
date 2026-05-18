@@ -12,6 +12,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springdoc.core.annotations.ParameterObject;
 
 import java.util.List;
 
@@ -25,7 +26,7 @@ public class AdminClientController {
     // 의뢰인 목록 조회
     @GetMapping("/clients")
     public ResponseEntity<ApiResponse<Page<AdminClientSummaryResponse>>> getClientList(
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.ok("의뢰인 목록 조회 성공", adminClientService.getClientList(pageable)));
     }
@@ -50,7 +51,7 @@ public class AdminClientController {
     @GetMapping("/announcements")
     public ResponseEntity<ApiResponse<Page<AdminAnnouncementSummaryResponse>>> getAnnouncementList(
             @RequestParam(required = false) AnnouncementStatusEnum status,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponse.ok("공고 목록 조회 성공", adminClientService.getAnnouncementList(status, pageable)));
     }
