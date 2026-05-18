@@ -30,4 +30,14 @@ public class SwaggerConfig {
                                 .scheme("bearer")
                                 .bearerFormat("JWT")));
     }
+
+    @Bean
+    public OperationCustomizer operationCustomizer() {
+        return (operation, handlerMethod) -> {
+            if (operation.getParameters() != null) {
+                operation.getParameters().removeIf(p -> "sort".equals(p.getName()));
+            }
+            return operation;
+        };
+    }
 }
