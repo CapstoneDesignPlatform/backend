@@ -15,11 +15,11 @@ public class ExpertProfileProvisioningService {
     private final ExpertProfileRepository expertProfileRepository;
 
     @Transactional
-    public void createDefaultProfile(User user) {
+    public void createDefaultProfile(User user, String businessName) {
         if (expertProfileRepository.findByUserId(user.getId()).isPresent()) {
             return;
         }
 
-        expertProfileRepository.save(ExpertProfile.createDefault(user));
+        expertProfileRepository.save(ExpertProfile.createDefault(user, businessName));
     }
 }

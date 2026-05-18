@@ -51,11 +51,11 @@ public class ExpertProfile extends BaseTimeEntity {
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
 
-    public static ExpertProfile createDefault(User user) {
+    public static ExpertProfile createDefault(User user, String businessName) {
         return ExpertProfile.builder()
                 .user(user)
                 .specialty("")
-                .businessName("")
+                .businessName(businessName)
                 .experienceYears(0)
                 .portfolioDescription("")
                 .isVerified(false)

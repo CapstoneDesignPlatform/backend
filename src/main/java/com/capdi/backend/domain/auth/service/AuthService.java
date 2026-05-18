@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -42,6 +43,13 @@ public class AuthService {
         if (request.getUserType() == UserTypeEnum.ADMIN) {
             throw new CustomException(ErrorCode.INVALID_SIGNUP_ROLE);
         }
+        String businessName = request.getBusinessName();
+        if (request.getUserType() == UserTypeEnum.EXPERT && !StringUtils.hasText(businessName)) {
+            throw new CustomException(ErrorCode.EXPERT_BUSINESS_NAME_REQUIRED);
+        }
+        if (request.getUserType() == UserTypeEnum.EXPERT) {
+            businessName = businessName.trim();
+        }
         String email = request.getEmail().toLowerCase();
         if (userRepository.existsByEmail(email)) {
             throw new CustomException(ErrorCode.EMAIL_ALREADY_EXISTS);
@@ -57,7 +65,7 @@ public class AuthService {
         User savedUser = userRepository.save(user);
 
         if (savedUser.getUserType() == UserTypeEnum.EXPERT) {
-            expertProfileProvisioningService.createDefaultProfile(savedUser);
+            expertProfileProvisioningService.createDefaultProfile(savedUser, businessName);
         }
     }
 
