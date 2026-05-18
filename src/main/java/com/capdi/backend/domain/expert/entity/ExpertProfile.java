@@ -39,6 +39,11 @@ public class ExpertProfile extends BaseTimeEntity {
     @Builder.Default
     private Boolean isVerified = false;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_status", nullable = false, length = 30)
+    @Builder.Default
+    private VerificationStatusEnum verificationStatus = VerificationStatusEnum.NOT_SUBMITTED;
+
     @Column(name = "selected_count", nullable = false)
     @Builder.Default
     private Integer selectedCount = 0;
@@ -54,6 +59,7 @@ public class ExpertProfile extends BaseTimeEntity {
                 .experienceYears(0)
                 .portfolioDescription("")
                 .isVerified(false)
+                .verificationStatus(VerificationStatusEnum.NOT_SUBMITTED)
                 .selectedCount(0)
                 .build();
     }
@@ -72,6 +78,9 @@ public class ExpertProfile extends BaseTimeEntity {
         }
     }
     public void applyVerification(String licenseType, String companyName, String portfolio) {
+        this.verificationStatus = VerificationStatusEnum.PENDING;
+        this.isVerified = false;
+        this.verifiedAt = null;
 
         if (licenseType != null) {
             this.specialty = licenseType;
@@ -86,4 +95,9 @@ public class ExpertProfile extends BaseTimeEntity {
         }
     }
 
+    public void updateVerificationStatus(VerificationStatusEnum verificationStatus) {
+        this.verificationStatus = verificationStatus;
+        this.isVerified = verificationStatus == VerificationStatusEnum.APPROVED;
+        this.verifiedAt = this.isVerified ? LocalDateTime.now() : null;
+    }
 }
