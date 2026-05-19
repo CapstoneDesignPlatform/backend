@@ -23,6 +23,7 @@ public class ClientInfoRequest {
 
     private String companyName;
 
+    @Pattern(regexp = "^\\d{3}-\\d{2}-\\d{5}$", message = "사업자등록번호 형식이 올바르지 않습니다.")
     private String businessNumber;
 
     private String address;
