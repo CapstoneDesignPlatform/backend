@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -90,8 +92,9 @@ public class AnnouncementService {
 
     private String generateAnnouncementCode(String contact) {
         String digits = contact.replaceAll("[^0-9]", "");
-        long count = announcementRepository.countByAnnouncementCodeStartingWith(digits);
-        return digits + String.format("%02d", count + 1);
+        char c1 = (char) ('A' + ThreadLocalRandom.current().nextInt(26));
+        char c2 = (char) ('A' + ThreadLocalRandom.current().nextInt(26));
+        return digits + c1 + c2;
     }
 
     private ClientInfo findClientInfo(Long clientInfoId) {

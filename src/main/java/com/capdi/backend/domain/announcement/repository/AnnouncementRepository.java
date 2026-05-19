@@ -14,8 +14,6 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
 
     Optional<Announcement> findByAnnouncementCode(String announcementCode);
 
-    long countByAnnouncementCodeStartingWith(String phoneDigits);
-
-    List<Announcement> findAllByClientInfo(ClientInfo clientInfo);
+List<Announcement> findAllByClientInfo(ClientInfo clientInfo);
     Page<Announcement> findAllByStatus(AnnouncementStatusEnum status, Pageable pageable);
 }
