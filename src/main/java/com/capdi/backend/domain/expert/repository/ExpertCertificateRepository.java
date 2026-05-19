@@ -8,4 +8,6 @@ import java.util.List;
 public interface ExpertCertificateRepository extends JpaRepository<ExpertCertificate, Long> {
 
     List<ExpertCertificate> findByExpertProfileId(Long expertProfileId);
+
+    boolean existsByFile_Id(Long fileId);
 }

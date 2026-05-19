@@ -1,27 +1,13 @@
 package com.capdi.backend.domain.expert.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Getter;
 import jakarta.validation.constraints.NotBlank;
-
-import java.time.LocalDate;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
 
 @Getter
 public class ExpertVerificationRequest {
 
-    @NotBlank(message = "자격증 유형은 필수입니다.")
-    @JsonProperty("license_type")
-    private String licenseType;
-
-    @JsonProperty("license_number")
-    private String licenseNumber;
-
-    @JsonProperty("issue_date")
-    private LocalDate issueDate;
-
-    @NotBlank(message = "회사명은 필수입니다.")
-    @JsonProperty("company_name")
-    private String companyName;
-
-    private String portfolio;
+    @NotBlank(message = "전문가 유형은 필수입니다.")
+    @Size(max = 100, message = "전문가 유형은 100자 이하로 입력해주세요.")
+    private String specialty;
 }

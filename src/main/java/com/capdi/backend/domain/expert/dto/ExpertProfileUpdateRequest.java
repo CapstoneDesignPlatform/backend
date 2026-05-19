@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.NotBlank;
-import java.util.List;
 
 @Getter
 @NoArgsConstructor
@@ -19,9 +18,4 @@ public class ExpertProfileUpdateRequest {
     @NotBlank(message = "회사명은 필수입니다.")
     @JsonProperty("company_name")
     private String companyName;
-
-    @JsonProperty("expertise_areas")
-    private List<String> expertiseAreas;
-
-    private String portfolio;
 }

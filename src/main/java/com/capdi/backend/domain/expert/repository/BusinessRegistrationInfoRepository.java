@@ -8,4 +8,6 @@ import java.util.List;
 public interface BusinessRegistrationInfoRepository extends JpaRepository<BusinessRegistrationInfo, Long> {
 
     List<BusinessRegistrationInfo> findByExpertProfileId(Long expertProfileId);
+
+    boolean existsByFile_Id(Long fileId);
 }

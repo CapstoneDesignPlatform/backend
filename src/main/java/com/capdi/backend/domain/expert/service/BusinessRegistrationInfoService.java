@@ -2,6 +2,7 @@ package com.capdi.backend.domain.expert.service;
 
 import com.capdi.backend.domain.expert.dto.BusinessRegistrationInfoCreateRequest;
 import com.capdi.backend.domain.expert.dto.BusinessRegistrationInfoResponse;
+import com.capdi.backend.domain.expert.dto.BusinessRegistrationInfoUpdateRequest;
 import com.capdi.backend.domain.expert.entity.BusinessRegistrationInfo;
 import com.capdi.backend.domain.expert.entity.ExpertFile;
 import com.capdi.backend.domain.expert.entity.ExpertProfile;
@@ -23,6 +24,7 @@ public class BusinessRegistrationInfoService {
     private final BusinessRegistrationInfoRepository businessRegistrationInfoRepository;
     private final ExpertProfileRepository expertProfileRepository;
     private final ExpertFileRepository expertFileRepository;
+    private final ExpertFileService expertFileService;
 
     @Transactional
     public BusinessRegistrationInfoResponse createMyBusinessRegistrationInfo(
@@ -44,9 +46,51 @@ public class BusinessRegistrationInfoService {
         return BusinessRegistrationInfoResponse.from(savedInfo);
     }
 
+    @Transactional
+    public BusinessRegistrationInfoResponse updateMyBusinessRegistrationInfo(
+            Long loginUserId,
+            Long businessRegistrationInfoId,
+            BusinessRegistrationInfoUpdateRequest request
+    ) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        BusinessRegistrationInfo businessRegistrationInfo =
+                getOwnedBusinessRegistrationInfo(businessRegistrationInfoId, expertProfile);
+        ExpertFile previousFile = businessRegistrationInfo.getFile();
+        ExpertFile newFile = getOwnedBusinessRegistrationFile(request.getFileId(), expertProfile);
+
+        businessRegistrationInfo.update(
+                newFile,
+                request.getBusinessNumber(),
+                request.getRepresentativeName(),
+                request.getCompanyName()
+        );
+
+        if (!previousFile.getId().equals(newFile.getId())) {
+            businessRegistrationInfoRepository.flush();
+            expertFileService.deleteReplacedFileIfUnused(previousFile);
+        }
+
+        return BusinessRegistrationInfoResponse.from(businessRegistrationInfo);
+    }
+
     private ExpertProfile getMyExpertProfile(Long loginUserId) {
         return expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.NOT_FOUND));
+    }
+
+    private BusinessRegistrationInfo getOwnedBusinessRegistrationInfo(
+            Long businessRegistrationInfoId,
+            ExpertProfile expertProfile
+    ) {
+        BusinessRegistrationInfo businessRegistrationInfo = businessRegistrationInfoRepository
+                .findById(businessRegistrationInfoId)
+                .orElseThrow(() -> new CustomException(ErrorCode.BUSINESS_REGISTRATION_INFO_NOT_FOUND));
+
+        if (!businessRegistrationInfo.getExpertProfile().getId().equals(expertProfile.getId())) {
+            throw new CustomException(ErrorCode.FORBIDDEN);
+        }
+
+        return businessRegistrationInfo;
     }
 
     private ExpertFile getOwnedBusinessRegistrationFile(Long fileId, ExpertProfile expertProfile) {

@@ -5,8 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.util.List;
-
 @Getter
 @Builder
 public class ExpertProfileResponse {
@@ -52,17 +50,6 @@ public class ExpertProfileResponse {
         @JsonProperty("company_name")
         private String companyName;
 
-        @JsonProperty("license_type")
-        private String licenseType;
-
-        @JsonProperty("expertise_areas")
-        private List<String> expertiseAreas;
-
-        private String portfolio;
-
-        @JsonProperty("verification_status")
-        private String verificationStatus;
-
         @JsonProperty("is_verified")
         private Boolean isVerified;
 
@@ -73,10 +60,6 @@ public class ExpertProfileResponse {
                     .id(expertProfile.getId())
                     .userId(expertProfile.getUser().getId())
                     .companyName(expertProfile.getBusinessName())
-                    .licenseType(expertProfile.getSpecialty())
-                    .expertiseAreas(List.of(expertProfile.getSpecialty()))
-                    .portfolio(expertProfile.getPortfolioDescription())
-                    .verificationStatus(expertProfile.getIsVerified() ? "APPROVED" : "NOT_APPLIED")
                     .isVerified(expertProfile.getIsVerified())
                     .stats(ExpertStatsDto.from(expertProfile))
                     .build();
@@ -89,8 +72,8 @@ public class ExpertProfileResponse {
         @JsonProperty("active_bids")
         private Integer activeBids;
 
-        @JsonProperty("won_projects")
-        private Integer wonProjects;
+        @JsonProperty("selected_count")
+        private Integer selectedCount;
 
         @JsonProperty("completed_projects")
         private Integer completedProjects;
@@ -101,7 +84,7 @@ public class ExpertProfileResponse {
         public static ExpertStatsDto from(ExpertProfile expertProfile) {
             return ExpertStatsDto.builder()
                     .activeBids(0)
-                    .wonProjects(expertProfile.getSelectedCount())
+                    .selectedCount(expertProfile.getSelectedCount())
                     .completedProjects(0)
                     .totalEarned(0)
                     .build();
