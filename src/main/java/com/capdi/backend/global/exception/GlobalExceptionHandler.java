@@ -2,6 +2,7 @@ package com.capdi.backend.global.exception;
 
 import com.capdi.backend.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -26,9 +27,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
         BindingResult bindingResult = e.getBindingResult();
+
         String message = bindingResult.getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .findFirst()
+                .or(() -> bindingResult.getGlobalErrors().stream()
+                        .map(DefaultMessageSourceResolvable::getDefaultMessage)
+                        .findFirst())
                 .orElse(ErrorCode.INVALID_INPUT.getMessage());
 
         log.warn("ValidationException: {}", message);
