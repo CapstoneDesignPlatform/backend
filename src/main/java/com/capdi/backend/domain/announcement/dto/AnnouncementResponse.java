@@ -27,7 +27,8 @@ public class AnnouncementResponse {
     private String currentLicense;
     private JobTypeEnum jobType;
     private String requiredLicense;
-    private BigDecimal assetScale;
+    private BigDecimal capital;
+    private BigDecimal capitalScale;
     private DiagnosisReasonEnum diagnosisReason;
     private String diagnosisReasonDetail;
     private AnnouncementStatusEnum status;
@@ -48,7 +49,8 @@ public class AnnouncementResponse {
                 .currentLicense(announcement.getCurrentLicense())
                 .jobType(announcement.getJobType())
                 .requiredLicense(announcement.getRequiredLicense())
-                .assetScale(announcement.getAssetScale())
+                .capital(announcement.getCapital())
+                .capitalScale(announcement.getCapitalScale())
                 .diagnosisReason(announcement.getDiagnosisReason())
                 .diagnosisReasonDetail(announcement.getDiagnosisReasonDetail())
                 .status(announcement.getStatus())
