@@ -10,6 +10,7 @@ import com.capdi.backend.domain.expert.entity.FileTypeEnum;
 import com.capdi.backend.domain.expert.repository.BusinessRegistrationInfoRepository;
 import com.capdi.backend.domain.expert.repository.ExpertFileRepository;
 import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
+import com.capdi.backend.domain.expert.util.FileVerificationUtil;
 import com.capdi.backend.global.exception.CustomException;
 import com.capdi.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class BusinessRegistrationInfoService {
     private final ExpertProfileRepository expertProfileRepository;
     private final ExpertFileRepository expertFileRepository;
     private final ExpertFileService expertFileService;
+    private final FileVerificationUtil fileVerificationUtil;
 
     @Transactional
     public BusinessRegistrationInfoResponse createMyBusinessRegistrationInfo(
@@ -33,6 +35,8 @@ public class BusinessRegistrationInfoService {
     ) {
         ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
         ExpertFile file = getOwnedBusinessRegistrationFile(request.getFileId(), expertProfile);
+
+        verifyBusinessRegistrationFile(file, request.getBusinessNumber(), request.getRepresentativeName(), request.getCompanyName());
 
         BusinessRegistrationInfo businessRegistrationInfo = BusinessRegistrationInfo.create(
                 expertProfile,
@@ -58,6 +62,8 @@ public class BusinessRegistrationInfoService {
         ExpertFile previousFile = businessRegistrationInfo.getFile();
         ExpertFile newFile = getOwnedBusinessRegistrationFile(request.getFileId(), expertProfile);
 
+        verifyBusinessRegistrationFile(newFile, request.getBusinessNumber(), request.getRepresentativeName(), request.getCompanyName());
+
         businessRegistrationInfo.update(
                 newFile,
                 request.getBusinessNumber(),
@@ -71,6 +77,27 @@ public class BusinessRegistrationInfoService {
         }
 
         return BusinessRegistrationInfoResponse.from(businessRegistrationInfo);
+    }
+
+    private void verifyBusinessRegistrationFile(
+            ExpertFile file,
+            String businessNumber,
+            String representativeName,
+            String companyName
+    ) {
+        boolean verified = fileVerificationUtil.verifyBusinessRegistration(
+                file.getOcrRawText(),
+                businessNumber,
+                representativeName,
+                companyName
+        );
+
+        if (verified) {
+            file.approveVerification();
+            return;
+        }
+
+        file.rejectVerification("OCR 결과와 입력한 사업자등록 정보가 일치하지 않습니다.");
     }
 
     private ExpertProfile getMyExpertProfile(Long loginUserId) {

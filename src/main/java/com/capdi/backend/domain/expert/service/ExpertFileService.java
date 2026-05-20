@@ -1,19 +1,20 @@
 package com.capdi.backend.domain.expert.service;
 
+import com.capdi.backend.domain.expert.client.GoogleVisionOcrClient;
 import com.capdi.backend.domain.expert.dto.ExpertFileDownloadUrlResponse;
 import com.capdi.backend.domain.expert.dto.ExpertFileUploadResponse;
 import com.capdi.backend.domain.expert.entity.ExpertFile;
 import com.capdi.backend.domain.expert.entity.ExpertProfile;
 import com.capdi.backend.domain.expert.entity.FileTypeEnum;
 import com.capdi.backend.domain.expert.entity.MimeTypeEnum;
-import com.capdi.backend.domain.expert.repository.ExpertFileRepository;
-import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
 import com.capdi.backend.domain.expert.repository.BusinessRegistrationInfoRepository;
 import com.capdi.backend.domain.expert.repository.ExpertCertificateRepository;
+import com.capdi.backend.domain.expert.repository.ExpertFileRepository;
+import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
 import com.capdi.backend.global.exception.CustomException;
 import com.capdi.backend.global.exception.ErrorCode;
-import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -21,9 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
+import com.capdi.backend.domain.expert.util.FileVerificationUtil;
 
-import java.net.MalformedURLException;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -36,12 +38,14 @@ import java.util.UUID;
 public class ExpertFileService {
 
     private static final String UPLOAD_DIR =
-            System.getProperty("user.dir") + "/uploads/files"; // 파일 업로드 성공시, 업로드 디렉터리 생김 .
+            System.getProperty("user.dir") + "/uploads/files";
 
     private final ExpertFileRepository expertFileRepository;
     private final ExpertProfileRepository expertProfileRepository;
     private final ExpertCertificateRepository expertCertificateRepository;
     private final BusinessRegistrationInfoRepository businessRegistrationInfoRepository;
+    private final GoogleVisionOcrClient googleVisionOcrClient;
+    private final FileVerificationUtil fileVerificationUtil;
 
     @Transactional
     public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
@@ -76,6 +80,30 @@ public class ExpertFileService {
 
         } catch (Exception e) {
             throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Transactional
+    public void runOcr(Long loginUserId, Long fileId) {
+        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        ExpertFile expertFile = getOwnedFile(fileId, expertProfile);
+
+        try {
+            String ocrResult = googleVisionOcrClient.requestOcr(
+                    expertFile.getFilePath()
+            );
+
+            expertFile.completeOcr(ocrResult);
+
+        } catch (Exception e) {
+            log.error("OCR failed. fileId={}, path={}, errorType={}, message={}",
+                    fileId,
+                    expertFile.getFilePath(),
+                    e.getClass().getName(),
+                    e.getMessage(),
+                    e
+            );
+            expertFile.failOcr("OCR processing failed.");
         }
     }
 

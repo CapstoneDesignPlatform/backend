@@ -1,0 +1,4 @@
+ALTER TABLE files
+    ADD COLUMN verification_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    ADD COLUMN ocr_raw_text LONGTEXT NULL,
+    ADD COLUMN reject_reason VARCHAR(500) NULL;
