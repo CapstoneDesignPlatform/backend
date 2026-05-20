@@ -70,8 +70,11 @@ public class Announcement extends BaseTimeEntity {
     @Column(name = "required_license", columnDefinition = "TEXT")
     private String requiredLicense;
 
-    @Column(name = "asset_scale", precision = 15, scale = 2)
-    private BigDecimal assetScale;  // 억원 단위
+    @Column(name = "capital", precision = 15, scale = 2, nullable = false)
+    private BigDecimal capital;  // 자본금 (억원 단위)
+
+    @Column(name = "capital_scale", precision = 15, scale = 2)
+    private BigDecimal capitalScale;  // 자본규모 (억원 단위, 창업예정이면 null)
 
     // 기타 탭 전용
     @Enumerated(EnumType.STRING)

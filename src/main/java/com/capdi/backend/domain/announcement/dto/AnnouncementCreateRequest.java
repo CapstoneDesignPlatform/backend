@@ -1,6 +1,7 @@
 package com.capdi.backend.domain.announcement.dto;
 
 import com.capdi.backend.domain.announcement.entity.*;
+import com.capdi.backend.domain.announcement.validation.ValidBusinessOwnerTypeDependentFields;
 import com.capdi.backend.domain.announcement.validation.ValidPurposeDependentFields;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -11,6 +12,7 @@ import java.math.BigDecimal;
 @Getter
 @NoArgsConstructor
 @ValidPurposeDependentFields
+@ValidBusinessOwnerTypeDependentFields
 public class AnnouncementCreateRequest {
 
     //공통 필드
@@ -26,7 +28,10 @@ public class AnnouncementCreateRequest {
     @NotNull(message = "사업자 유형은 필수입니다.")
     private BusinessOwnerTypeEnum businessOwnerType;
 
-    private BigDecimal assetSize; //억원 단위(창업 예정이면 null)
+    @NotNull(message = "자본금은 필수입니다.")
+    private BigDecimal capital;  // 자본금 (억원 단위, 항상 필수)
+
+    private BigDecimal capitalScale;  // 자본규모 (억원 단위, 창업예정이면 null)
 
     //필요 면허 탭 전용 (purpose = REQUIRED_LICENSE)
     private AnnouncementCategoryEnum category;              // 신규 | 추가

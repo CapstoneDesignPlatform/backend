@@ -81,7 +81,8 @@ public class AnnouncementService {
                 .currentLicense(request.getHeldLicense())
                 .jobType(request.getPurpose().toJobType())
                 .requiredLicense(request.getRequiredLicense())
-                .assetScale(request.getAssetSize())
+                .capital(request.getCapital())
+                .capitalScale(request.getCapitalScale())
                 .diagnosisReason(request.getDiagnosisReason())
                 .diagnosisReasonDetail(request.getDiagnosisReasonDetail())
                 .build();

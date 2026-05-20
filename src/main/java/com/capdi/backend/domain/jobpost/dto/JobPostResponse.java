@@ -48,8 +48,10 @@ public class JobPostResponse {
 
     private DiagnosisReasonEnum reason;
 
-    @JsonProperty("asset_scale_label")
-    private BigDecimal assetScaleLabel;
+    private BigDecimal capital;
+
+    @JsonProperty("capital_scale")
+    private BigDecimal capitalScale;
 
     @JsonProperty("bid_count")
     private long bidCount;
@@ -85,7 +87,8 @@ public class JobPostResponse {
                 .currentIndustry(announcement == null ? null : announcement.getCurrentIndustry())
                 .currentLicense(announcement == null ? null : announcement.getCurrentLicense())
                 .reason(announcement == null ? null : announcement.getDiagnosisReason())
-                .assetScaleLabel(announcement == null ? null : announcement.getAssetScale())
+                .capital(announcement == null ? null : announcement.getCapital())
+                .capitalScale(announcement == null ? null : announcement.getCapitalScale())
                 .bidCount(bidCount)
                 .postedAt(jobPost.getCreatedAt())
                 .isNew(isNew(jobPost.getCreatedAt()))
