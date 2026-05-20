@@ -29,7 +29,22 @@ public class ExpertFileController {
             @RequestPart("file") MultipartFile file,
             @RequestParam("purpose") String purpose
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(expertFileService.uploadFile(userDetails.getUserId(), file, purpose)));
+        return ResponseEntity.ok(ApiResponse.ok(
+                expertFileService.uploadFile(userDetails.getUserId(), file, purpose)
+        ));
+    }
+
+    @PostMapping("/{fileId}/ocr")
+    public ResponseEntity<ApiResponse<Void>> runOcr(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long fileId
+    ) {
+        expertFileService.runOcr(userDetails.getUserId(), fileId);
+
+        return ResponseEntity.ok(ApiResponse.ok(
+                "OCR 검증이 완료되었습니다.",
+                null
+        ));
     }
 
     @GetMapping("/{fileId}/download-url")
@@ -37,7 +52,9 @@ public class ExpertFileController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long fileId
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(expertFileService.getDownloadUrl(userDetails.getUserId(), fileId)));
+        return ResponseEntity.ok(ApiResponse.ok(
+                expertFileService.getDownloadUrl(userDetails.getUserId(), fileId)
+        ));
     }
 
     @GetMapping("/{fileId}/download")

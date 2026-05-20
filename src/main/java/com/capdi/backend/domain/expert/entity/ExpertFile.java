@@ -17,6 +17,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import jakarta.persistence.Lob;
 
 @Entity
 @Table(name = "files")
@@ -53,4 +54,37 @@ public class ExpertFile extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "file_type", nullable = false, length = 30)
     private FileTypeEnum fileType;
+
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    @Column(name = "verification_status", nullable = false, length = 30)
+    private FileVerificationStatusEnum verificationStatus = FileVerificationStatusEnum.PENDING;
+
+    @Lob
+    @Column(name = "ocr_raw_text", columnDefinition = "LONGTEXT")
+    private String ocrRawText;
+
+    @Column(name = "reject_reason", length = 500)
+    private String rejectReason;
+
+    public void completeOcr(String ocrRawText) {
+        this.ocrRawText = ocrRawText;
+        this.verificationStatus = FileVerificationStatusEnum.OCR_COMPLETED;
+        this.rejectReason = null;
+    }
+
+    public void failOcr(String rejectReason) {
+        this.verificationStatus = FileVerificationStatusEnum.FAILED;
+        this.rejectReason = rejectReason;
+    }
+
+    public void approveVerification() {
+        this.verificationStatus = FileVerificationStatusEnum.APPROVED;
+        this.rejectReason = null;
+    }
+
+    public void rejectVerification(String rejectReason) {
+        this.verificationStatus = FileVerificationStatusEnum.REJECTED;
+        this.rejectReason = rejectReason;
+    }
 }
