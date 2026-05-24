@@ -24,6 +24,10 @@ public class ExpertCertificateUpdateRequest {
     @JsonProperty("issue_date")
     private LocalDate issueDate;
 
+    @NotNull(message = "자격증 유효기간은 필수입니다.")
+    @JsonProperty("expiry_date")
+    private LocalDate expiryDate;
+
     @NotBlank(message = "자격증 주인 이름은 필수입니다.")
     @JsonProperty("owner_name")
     private String ownerName;

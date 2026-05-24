@@ -52,6 +52,9 @@ public class ExpertCertificate extends BaseTimeEntity {
     @Column(name = "issue_date", nullable = false)
     private LocalDate issueDate;
 
+    @Column(name = "expiry_date", nullable = false)
+    private LocalDate expiryDate;
+
     @Column(name = "expired_at")
     private LocalDate expiredAt;
 
@@ -65,6 +68,7 @@ public class ExpertCertificate extends BaseTimeEntity {
             String certificateName,
             String certificateNumber,
             LocalDate issueDate,
+            LocalDate expiryDate,
             String ownerName
     ) {
         CertificateTypeCodeEnum certificateTypeCode = CertificateTypeCodeEnum.fromLabel(certificateName);
@@ -76,7 +80,7 @@ public class ExpertCertificate extends BaseTimeEntity {
                 .certificateName(certificateTypeCode.getLabel())
                 .certificateNumber(certificateNumber)
                 .issueDate(issueDate)
-                .expiredAt(certificateTypeCode.calculateExpiredAt(issueDate))
+                .expiryDate(expiryDate)
                 .certificateTypeCode(certificateTypeCode)
                 .build();
     }
@@ -86,6 +90,7 @@ public class ExpertCertificate extends BaseTimeEntity {
             String certificateName,
             String certificateNumber,
             LocalDate issueDate,
+            LocalDate expiryDate,
             String ownerName
     ) {
         CertificateTypeCodeEnum certificateTypeCode = CertificateTypeCodeEnum.fromLabel(certificateName);
@@ -95,7 +100,7 @@ public class ExpertCertificate extends BaseTimeEntity {
         this.certificateName = certificateTypeCode.getLabel();
         this.certificateNumber = certificateNumber;
         this.issueDate = issueDate;
-        this.expiredAt = certificateTypeCode.calculateExpiredAt(issueDate);
+        this.expiryDate = expiryDate;
         this.certificateTypeCode = certificateTypeCode;
     }
 }
