@@ -28,6 +28,10 @@ public enum ErrorCode {
     EXPERT_PROFILE_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 전문가 프로필이 존재합니다."),
     EXPERT_CERTIFICATE_NOT_FOUND(HttpStatus.NOT_FOUND, "전문가 자격증 정보를 찾을 수 없습니다."),
     BUSINESS_REGISTRATION_INFO_NOT_FOUND(HttpStatus.NOT_FOUND, "사업자 등록 정보를 찾을 수 없습니다."),
+    ALREADY_VERIFICATION_PENDING(HttpStatus.CONFLICT, "이미 심사 대기 중인 인증 신청이 있습니다."),
+    ALREADY_VERIFIED(HttpStatus.CONFLICT, "이미 승인된 전문가입니다."),
+    INVALID_EXPERT_SPECIALTY(HttpStatus.BAD_REQUEST, "지원하지 않는 전문가 유형입니다."),
+    VERIFICATION_REQUIREMENT_NOT_MET(HttpStatus.BAD_REQUEST, "인증 신청 조건을 확인해주세요."),
 
     // 토큰
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),

@@ -1,5 +1,7 @@
 package com.capdi.backend.global.exception;
 
+import com.capdi.backend.domain.expert.dto.VerificationRequirementErrorResponse;
+import com.capdi.backend.domain.expert.exception.VerificationRequirementException;
 import com.capdi.backend.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
@@ -22,6 +24,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ApiResponse.fail(errorCode.getMessage()));
+    }
+
+    @ExceptionHandler(VerificationRequirementException.class)
+    public ResponseEntity<ApiResponse<VerificationRequirementErrorResponse>> handleVerificationRequirementException(
+            VerificationRequirementException e
+    ) {
+        log.warn("VerificationRequirementException: {}", e.getMessage());
+        return ResponseEntity
+                .status(ErrorCode.VERIFICATION_REQUIREMENT_NOT_MET.getHttpStatus())
+                .body(ApiResponse.fail(ErrorCode.VERIFICATION_REQUIREMENT_NOT_MET.getMessage(), e.getResponse()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
