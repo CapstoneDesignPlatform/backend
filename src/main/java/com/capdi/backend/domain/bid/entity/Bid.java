@@ -44,4 +44,15 @@ public class Bid extends BaseTimeEntity {
 
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;
+
+    public static Bid create(Announcement announcement, User expertUser, BigDecimal bidAmount) {
+        return Bid.builder()
+                .announcement(announcement)
+                .expertUser(expertUser)
+                .bidAmount(bidAmount)
+                .bidStartDate(LocalDate.now())
+                .status(BidStatusEnum.PENDING)
+                .submittedAt(LocalDateTime.now())
+                .build();
+    }
 }

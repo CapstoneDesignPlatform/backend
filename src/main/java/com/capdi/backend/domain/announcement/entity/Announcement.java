@@ -92,4 +92,8 @@ public class Announcement extends BaseTimeEntity {
     public void updateStatus(AnnouncementStatusEnum newStatus) {
         this.status = newStatus;
     }
+
+    public String getDisplayTitle() {
+        return industry.getLabel() + " " + purpose.getLabel();
+    }
 }
