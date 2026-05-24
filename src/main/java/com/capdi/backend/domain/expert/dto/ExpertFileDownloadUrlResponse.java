@@ -45,7 +45,7 @@ public class ExpertFileDownloadUrlResponse {
                     .mimeType(expertFile.getMimeType().name())
                     .size(expertFile.getFileSize())
                     .downloadUrl("http://localhost:8081/api/files/" + expertFile.getId() + "/download")
-                    .expiresAt(null)
+                    .expiresAt(LocalDateTime.now().plusMinutes(10))
                     .build();
         }
     }
