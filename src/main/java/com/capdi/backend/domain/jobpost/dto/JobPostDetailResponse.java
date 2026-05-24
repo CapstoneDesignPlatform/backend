@@ -1,9 +1,9 @@
 package com.capdi.backend.domain.jobpost.dto;
 
 import com.capdi.backend.domain.announcement.entity.*;
+import com.capdi.backend.domain.bid.entity.Bid;
 import com.capdi.backend.domain.client.entity.ClientInfo;
 import com.capdi.backend.domain.jobpost.entity.JobPost;
-import com.capdi.backend.domain.jobpost.entity.JobPostStatusEnum;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
@@ -16,6 +16,9 @@ import java.time.LocalDateTime;
 public class JobPostDetailResponse {
 
     private Long id;
+
+    @JsonProperty("announcement_code")
+    private String announcementCode;
 
     @JsonProperty("company_id")
     private Long companyId;
@@ -65,11 +68,15 @@ public class JobPostDetailResponse {
     @JsonProperty("is_new")
     private boolean isNew;
 
-    private JobPostStatusEnum status;
+    private String status;
+
+    @JsonProperty("has_my_bid")
+    private boolean hasMyBid;
+
     private CompanyResponse company;
 
     @JsonProperty("my_bid")
-    private Object myBid;
+    private MyBidSummaryResponse myBid;
 
     public static JobPostDetailResponse from(JobPost jobPost, long bidCount) {
         Announcement announcement = jobPost.getAnnouncement();
@@ -77,6 +84,7 @@ public class JobPostDetailResponse {
 
         return JobPostDetailResponse.builder()
                 .id(jobPost.getId())
+                .announcementCode(announcement == null ? null : announcement.getAnnouncementCode())
                 .companyId(clientInfo == null ? null : clientInfo.getId())
                 .companyName(clientInfo == null ? null : clientInfo.getCompanyName())
                 .title(jobPost.getTitle())
@@ -97,9 +105,41 @@ public class JobPostDetailResponse {
                 .postedAt(jobPost.getCreatedAt())
                 .createdAt(jobPost.getCreatedAt())
                 .isNew(isNew(jobPost.getCreatedAt()))
-                .status(jobPost.getStatus())
+                .status(jobPost.getStatus() == null ? null : jobPost.getStatus().name())
+                .hasMyBid(false)
                 .company(CompanyResponse.from(clientInfo))
                 .myBid(null)
+                .build();
+    }
+
+    public static JobPostDetailResponse from(Announcement announcement, long bidCount, Bid myBid) {
+        ClientInfo clientInfo = announcement.getClientInfo();
+
+        return JobPostDetailResponse.builder()
+                .id(announcement.getId())
+                .announcementCode(announcement.getAnnouncementCode())
+                .companyId(clientInfo == null ? null : clientInfo.getId())
+                .companyName(clientInfo == null ? null : clientInfo.getCompanyName())
+                .title(announcement.getDisplayTitle())
+                .industry(announcement.getIndustry())
+                .jobType(announcement.getJobType())
+                .jobTypeLabel(resolveJobTypeLabel(announcement.getJobType()))
+                .businessType(announcement.getBusinessOwnerType())
+                .classification(announcement.getCategory() == null ? null : announcement.getCategory().name())
+                .requiredLicense(announcement.getRequiredLicense())
+                .currentIndustry(announcement.getCurrentIndustry())
+                .currentLicense(announcement.getCurrentLicense())
+                .reason(announcement.getDiagnosisReason())
+                .capital(announcement.getCapital())
+                .capitalScale(announcement.getCapitalScale())
+                .bidCount(bidCount)
+                .postedAt(announcement.getCreatedAt())
+                .createdAt(announcement.getCreatedAt())
+                .isNew(isNew(announcement.getCreatedAt()))
+                .status(announcement.getStatus().name())
+                .hasMyBid(myBid != null)
+                .company(CompanyResponse.from(clientInfo))
+                .myBid(myBid == null ? null : MyBidSummaryResponse.from(myBid))
                 .build();
     }
 
@@ -139,6 +179,30 @@ public class JobPostDetailResponse {
                     .name(clientInfo.getCompanyName())
                     .representative(clientInfo.getRepresentativeName())
                     .location(clientInfo.getAddress())
+                    .build();
+        }
+    }
+
+    @Getter
+    @Builder
+    public static class MyBidSummaryResponse {
+
+        private Long id;
+
+        @JsonProperty("bid_amount")
+        private BigDecimal bidAmount;
+
+        private String status;
+
+        @JsonProperty("submitted_at")
+        private LocalDateTime submittedAt;
+
+        private static MyBidSummaryResponse from(Bid bid) {
+            return MyBidSummaryResponse.builder()
+                    .id(bid.getId())
+                    .bidAmount(bid.getBidAmount())
+                    .status(bid.getStatus().name())
+                    .submittedAt(bid.getSubmittedAt())
                     .build();
         }
     }

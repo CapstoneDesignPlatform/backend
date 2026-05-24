@@ -1,9 +1,9 @@
 package com.capdi.backend.domain.jobpost.dto;
 
 import com.capdi.backend.domain.announcement.entity.*;
+import com.capdi.backend.domain.bid.entity.Bid;
 import com.capdi.backend.domain.client.entity.ClientInfo;
 import com.capdi.backend.domain.jobpost.entity.JobPost;
-import com.capdi.backend.domain.jobpost.entity.JobPostStatusEnum;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
@@ -16,6 +16,9 @@ import java.time.LocalDateTime;
 public class JobPostResponse {
 
     private Long id;
+
+    @JsonProperty("announcement_code")
+    private String announcementCode;
 
     @JsonProperty("company_id")
     private Long companyId;
@@ -62,7 +65,7 @@ public class JobPostResponse {
     @JsonProperty("is_new")
     private boolean isNew;
 
-    private JobPostStatusEnum status;
+    private String status;
 
     @JsonProperty("has_my_bid")
     private boolean hasMyBid;
@@ -73,6 +76,7 @@ public class JobPostResponse {
 
         return JobPostResponse.builder()
                 .id(jobPost.getId())
+                .announcementCode(announcement == null ? null : announcement.getAnnouncementCode())
                 .companyId(clientInfo == null ? null : clientInfo.getId())
                 .companyName(clientInfo == null ? null : clientInfo.getCompanyName())
                 .title(jobPost.getTitle())
@@ -92,7 +96,35 @@ public class JobPostResponse {
                 .bidCount(bidCount)
                 .postedAt(jobPost.getCreatedAt())
                 .isNew(isNew(jobPost.getCreatedAt()))
-                .status(jobPost.getStatus())
+                .status(jobPost.getStatus() == null ? null : jobPost.getStatus().name())
+                .hasMyBid(hasMyBid)
+                .build();
+    }
+
+    public static JobPostResponse from(Announcement announcement, long bidCount, boolean hasMyBid) {
+        ClientInfo clientInfo = announcement.getClientInfo();
+
+        return JobPostResponse.builder()
+                .id(announcement.getId())
+                .announcementCode(announcement.getAnnouncementCode())
+                .companyId(clientInfo == null ? null : clientInfo.getId())
+                .companyName(clientInfo == null ? null : clientInfo.getCompanyName())
+                .title(announcement.getDisplayTitle())
+                .industry(announcement.getIndustry())
+                .jobType(announcement.getJobType())
+                .jobTypeLabel(resolveJobTypeLabel(announcement.getJobType()))
+                .businessType(announcement.getBusinessOwnerType())
+                .classification(announcement.getCategory() == null ? null : announcement.getCategory().name())
+                .requiredLicense(announcement.getRequiredLicense())
+                .currentIndustry(announcement.getCurrentIndustry())
+                .currentLicense(announcement.getCurrentLicense())
+                .reason(announcement.getDiagnosisReason())
+                .capital(announcement.getCapital())
+                .capitalScale(announcement.getCapitalScale())
+                .bidCount(bidCount)
+                .postedAt(announcement.getCreatedAt())
+                .isNew(isNew(announcement.getCreatedAt()))
+                .status(announcement.getStatus().name())
                 .hasMyBid(hasMyBid)
                 .build();
     }
