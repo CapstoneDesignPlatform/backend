@@ -29,6 +29,7 @@ public class ExpertVerificationStatusResponse {
                 .verificationRequest(VerificationRequestDto.builder()
                         .id(applied ? expertProfile.getId() : null)
                         .status(expertProfile.getIsVerified())
+                        .verificationStatus(toApiVerificationStatus(expertProfile.getVerificationStatus()))
                         .specialty(hasText(expertProfile.getSpecialty()) ? expertProfile.getSpecialty() : null)
                         .companyName(hasText(expertProfile.getBusinessName()) ? expertProfile.getBusinessName() : null)
                         .certificates(certificates.stream()
@@ -38,10 +39,16 @@ public class ExpertVerificationStatusResponse {
                                 ? BusinessRegistrationInfoResponse.from(businessRegistrationInfo)
                                 : null)
                         .submittedAt(applied ? expertProfile.getUpdatedAt() : null)
-                        .reviewedAt(expertProfile.getIsVerified() ? expertProfile.getVerifiedAt() : null)
-                        .rejectedReason(null)
+                        .reviewedAt(expertProfile.getReviewedAt())
+                        .rejectedReason(expertProfile.getRejectedReason())
                         .build())
                 .build();
+    }
+
+    private static String toApiVerificationStatus(VerificationStatusEnum verificationStatus) {
+        return verificationStatus == VerificationStatusEnum.NOT_SUBMITTED
+                ? "NOT_APPLIED"
+                : verificationStatus.name();
     }
 
     private static boolean hasText(String value) {
@@ -55,6 +62,9 @@ public class ExpertVerificationStatusResponse {
         private Long id;
 
         private Boolean status;
+
+        @JsonProperty("verification_status")
+        private String verificationStatus;
 
         private String specialty;
 

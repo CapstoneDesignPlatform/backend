@@ -91,8 +91,7 @@ public class AdminExpertService {
     /**
      * 전문가 승인/반려 상태 변경
      * 쓰기 작업이므로 @Transactional을 별도로 선언한다.
-     * rejectReason은 현재 별도 컬럼이 없으면 저장하지 않고,
-     * 추후 admin_logs.description에 기록하는 방식으로 확장 가능하다.
+     * 현재 반려 사유는 expert profile에 저장하고 상태 변경 이력은 admin log에 기록한다.
      */
     @Transactional
     public AdminExpertDetailResponse updateVerificationStatus(
@@ -102,7 +101,7 @@ public class AdminExpertService {
         ExpertProfile expertProfile = getExpertProfileByUserId(userId);
         VerificationStatusEnum beforeStatus = expertProfile.getVerificationStatus();
 
-        expertProfile.updateVerificationStatus(request.getVerificationStatus());
+        expertProfile.updateVerificationStatus(request.getVerificationStatus(), request.getRejectReason());
         saveVerificationStatusChangeLog(expertProfile, beforeStatus, request);
 
         return AdminExpertDetailResponse.from(expertProfile);
