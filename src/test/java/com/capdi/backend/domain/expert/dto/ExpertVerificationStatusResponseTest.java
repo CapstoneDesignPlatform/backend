@@ -37,6 +37,18 @@ class ExpertVerificationStatusResponseTest {
     }
 
     @Test
+    void returnsDefaultReasonWhenRejectedWithoutReason() {
+        ExpertProfile profile = expertProfile(VerificationStatusEnum.PENDING);
+
+        profile.updateVerificationStatus(VerificationStatusEnum.REJECTED, " ");
+
+        ExpertVerificationStatusResponse.VerificationRequestDto response =
+                ExpertVerificationStatusResponse.from(profile, List.of(), null).getVerificationRequest();
+
+        assertThat(response.getRejectedReason()).isEqualTo(ExpertProfile.DEFAULT_REJECTED_REASON);
+    }
+
+    @Test
     void clearsRejectedReasonWhenRejectedExpertIsApproved() {
         ExpertProfile profile = expertProfile(VerificationStatusEnum.PENDING);
         profile.updateVerificationStatus(VerificationStatusEnum.REJECTED, "서류를 다시 제출해주세요.");

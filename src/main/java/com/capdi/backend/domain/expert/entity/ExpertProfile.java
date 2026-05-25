@@ -15,6 +15,9 @@ import java.time.LocalDateTime;
 @Builder
 public class ExpertProfile extends BaseTimeEntity {
 
+    public static final String DEFAULT_REJECTED_REASON =
+            "제출 서류를 확인할 수 없어 인증이 반려되었습니다. 제출 정보를 확인한 후 다시 신청해주세요.";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -95,8 +98,14 @@ public class ExpertProfile extends BaseTimeEntity {
         this.verifiedAt = this.isVerified ? now : null;
         this.reviewedAt = isReviewed(verificationStatus) ? now : null;
         this.rejectedReason = verificationStatus == VerificationStatusEnum.REJECTED
-                ? rejectedReason
+                ? resolveRejectedReason(rejectedReason)
                 : null;
+    }
+
+    private String resolveRejectedReason(String rejectedReason) {
+        return rejectedReason == null || rejectedReason.isBlank()
+                ? DEFAULT_REJECTED_REASON
+                : rejectedReason;
     }
 
     private boolean isReviewed(VerificationStatusEnum verificationStatus) {
