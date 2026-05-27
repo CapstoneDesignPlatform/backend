@@ -24,5 +24,6 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
     long countByAnnouncementId(Long announcementId);
 
     List<Bid> findAllByAnnouncement(Announcement announcement);
+    List<Bid> findAllByAnnouncementIn(List<Announcement> announcements);
     int countByAnnouncement(Announcement announcement);
 }

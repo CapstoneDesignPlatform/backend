@@ -130,9 +130,7 @@ public class AnnouncementService {
                 .toList();
 
         CurrentAnnouncementDto currentDto = buildCurrentDto(current);
-        List<PastAnnouncementDto> pastDtos = past.stream()
-                .map(this::buildPastDto)
-                .toList();
+        List<PastAnnouncementDto> pastDtos = buildPastDtos(past);
 
         return ClientAnnouncementListResponse.builder()
                 .currentAnnouncement(currentDto)
@@ -157,22 +155,40 @@ public class AnnouncementService {
         return CurrentAnnouncementDto.from(announcement, bids, profileMap);
     }
 
-    private PastAnnouncementDto buildPastDto(Announcement announcement) {
-        List<Bid> bids = bidRepository.findAllByAnnouncement(announcement);
+    private List<PastAnnouncementDto> buildPastDtos(List<Announcement> past) {
+        if (past.isEmpty()) return List.of();
 
-        Bid selectedBid = bids.stream()
+        // 과거 의뢰 전체 bids 한 번에 조회
+        List<Bid> allBids = bidRepository.findAllByAnnouncementIn(past);
+
+        // 의뢰별 선정된 bid 맵 구성
+        Map<Long, Bid> selectedBidMap = allBids.stream()
                 .filter(b -> b.getStatus() == BidStatusEnum.SELECTED)
-                .findFirst()
-                .orElse(null);
+                .collect(Collectors.toMap(
+                        b -> b.getAnnouncement().getId(),
+                        b -> b,
+                        (a, b) -> a  // 중복 시 첫 번째 유지
+                ));
 
-        ExpertProfile profile = null;
-        if (selectedBid != null) {
-            profile = expertProfileRepository
-                    .findByUserId(selectedBid.getExpertUser().getId())
-                    .orElse(null);
-        }
+        // 선정된 bid의 전문가 프로필 한 번에 조회
+        List<Long> selectedExpertIds = selectedBidMap.values().stream()
+                .map(b -> b.getExpertUser().getId())
+                .toList();
 
-        return PastAnnouncementDto.from(announcement, selectedBid, profile);
+        Map<Long, ExpertProfile> profileMap = expertProfileRepository
+                .findByUserIdIn(selectedExpertIds)
+                .stream()
+                .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+
+        return past.stream()
+                .map(announcement -> {
+                    Bid selectedBid = selectedBidMap.get(announcement.getId());
+                    ExpertProfile profile = selectedBid != null
+                            ? profileMap.get(selectedBid.getExpertUser().getId())
+                            : null;
+                    return PastAnnouncementDto.from(announcement, selectedBid, profile);
+                })
+                .toList();
     }
 
     public AnnouncementDetailResponse getAnnouncementByCode(String announcementCode) {
