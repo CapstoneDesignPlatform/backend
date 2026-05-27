@@ -2,6 +2,8 @@ package com.capdi.backend.domain.announcement.controller;
 
 import com.capdi.backend.domain.announcement.dto.AnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.dto.AnnouncementCreateResponse;
+import com.capdi.backend.domain.announcement.dto.AnnouncementDetailResponse;
+import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse;
 import com.capdi.backend.domain.announcement.service.AnnouncementService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
@@ -47,5 +49,28 @@ public class AnnouncementController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("의뢰가 성공적으로 등록되었습니다.", response));
+    }
+
+    @GetMapping("/{announcementCode}")
+    @Operation(summary = "의뢰 코드로 공고 조회", description = "회원/비회원 모두 접근 가능합니다.")
+    public ResponseEntity<ApiResponse<AnnouncementDetailResponse>> getAnnouncementByCode(
+            @PathVariable String announcementCode) {
+
+        AnnouncementDetailResponse response =
+                announcementService.getAnnouncementByCode(announcementCode);
+
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "마이페이지 의뢰 목록 조회", description = "현재 진행중인 의뢰 1건과 과거 의뢰 내역을 반환합니다.")
+    public ResponseEntity<ApiResponse<ClientAnnouncementListResponse>> getClientAnnouncements(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        ClientAnnouncementListResponse response =
+                announcementService.getClientAnnouncements(userDetails.getUserId());
+
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 }
