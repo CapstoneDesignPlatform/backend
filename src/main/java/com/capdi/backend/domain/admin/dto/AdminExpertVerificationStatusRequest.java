@@ -6,10 +6,6 @@ import lombok.Getter;
 
 /**
  * 관리자 전문가 승인 상태 변경 요청 DTO
- *
- * 현재 ExpertProfile에는 verificationStatus Enum 컬럼이 없고,
- * isVerified Boolean 컬럼만 존재한다.
- *
  * verificationStatus 값은 Enum으로 받아 오타나 허용되지 않는 상태값을 방지한다.
  */
 @Getter
