@@ -7,6 +7,7 @@ import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse.CurrentAnnouncementDto;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse.PastAnnouncementDto;
 import com.capdi.backend.domain.announcement.entity.Announcement;
+import com.capdi.backend.domain.announcement.entity.AnnouncementProgressStepEnum;
 import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
 import com.capdi.backend.domain.announcement.repository.AnnouncementRepository;
 import com.capdi.backend.domain.bid.entity.Bid;
@@ -21,11 +22,8 @@ import com.capdi.backend.domain.user.repository.UserRepository;
 import com.capdi.backend.global.exception.CustomException;
 import com.capdi.backend.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -43,12 +41,9 @@ public class AnnouncementService {
     private final UserRepository userRepository;
     private final BidRepository bidRepository;
     private final ExpertProfileRepository expertProfileRepository;
+    private final AnnouncementSaverService announcementSaverService;
 
     private static final int MAX_RETRY_COUNT = 3;
-
-    @Lazy
-    @Autowired
-    private AnnouncementService self;
 
     public AnnouncementCreateResponse createAnnouncement(AnnouncementCreateRequest request, Long userId) {
         ClientInfo clientInfo = findClientInfo(request.getClientInfoId());
@@ -69,7 +64,7 @@ public class AnnouncementService {
         for (int attempt = 0; attempt < MAX_RETRY_COUNT; attempt++) {
             try {
                 String code = generateAnnouncementCode(clientInfo.getContact());
-                return self.saveAnnouncement(request, user, clientInfo, code);
+                return announcementSaverService.save(request, user, clientInfo, code);
             } catch (DataIntegrityViolationException e) {
                 if (attempt == MAX_RETRY_COUNT - 1) {
                     throw new CustomException(ErrorCode.CODE_GENERATION_FAILED);
@@ -77,33 +72,6 @@ public class AnnouncementService {
             }
         }
         throw new CustomException(ErrorCode.CODE_GENERATION_FAILED);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public AnnouncementCreateResponse saveAnnouncement(
-            AnnouncementCreateRequest request, User user, ClientInfo clientInfo, String code) {
-
-        Announcement announcement = Announcement.builder()
-                .user(user)
-                .clientInfo(clientInfo)
-                .announcementCode(code)
-                .industry(request.getIndustry())
-                .purpose(request.getPurpose())
-                .businessOwnerType(request.getBusinessOwnerType())
-                .category(request.getCategory())
-                .currentIndustry(request.getCurrentIndustryStatus())
-                .currentIndustryDetail(request.getCurrentIndustryDetail())
-                .currentLicense(request.getHeldLicense())
-                .jobType(request.getPurpose().toJobType())
-                .requiredLicense(request.getRequiredLicense())
-                .capital(request.getCapital())
-                .capitalScale(request.getCapitalScale())
-                .diagnosisReason(request.getDiagnosisReason())
-                .diagnosisReasonDetail(request.getDiagnosisReasonDetail())
-                .build();
-
-        announcementRepository.saveAndFlush(announcement);
-        return AnnouncementCreateResponse.of(code);
     }
 
     private String generateAnnouncementCode(String contact) {
@@ -121,13 +89,13 @@ public class AnnouncementService {
                 .findAllByClientInfoOrderByCreatedAtDesc(clientInfo);
 
         Announcement current = all.stream()
-                .filter(a -> a.getStatus() == AnnouncementStatusEnum.ACTIVE)
+                .filter(a -> a.getStatus() != AnnouncementStatusEnum.CANCELLED
+                        && a.getProgressStep() != AnnouncementProgressStepEnum.STEP_7_COMPLETED)
                 .findFirst()
                 .orElse(null);
 
-        List<Announcement> past = all.stream()
-                .filter(a -> a.getStatus() != AnnouncementStatusEnum.ACTIVE)
-                .toList();
+        List<Announcement> past = current == null ? all
+                : all.stream().filter(a -> !a.getId().equals(current.getId())).toList();
 
         CurrentAnnouncementDto currentDto = buildCurrentDto(current);
         List<PastAnnouncementDto> pastDtos = buildPastDtos(past);
@@ -142,32 +110,28 @@ public class AnnouncementService {
         if (announcement == null) return null;
 
         List<Bid> bids = bidRepository.findAllByAnnouncement(announcement);
+        return CurrentAnnouncementDto.from(announcement, bids, buildProfileMap(bids));
+    }
 
+    private Map<Long, ExpertProfile> buildProfileMap(List<Bid> bids) {
         List<Long> expertUserIds = bids.stream()
                 .map(b -> b.getExpertUser().getId())
                 .toList();
-
-        Map<Long, ExpertProfile> profileMap = expertProfileRepository
-                .findByUserIdIn(expertUserIds)
+        return expertProfileRepository.findByUserIdIn(expertUserIds)
                 .stream()
                 .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
-
-        return CurrentAnnouncementDto.from(announcement, bids, profileMap);
     }
 
     private List<PastAnnouncementDto> buildPastDtos(List<Announcement> past) {
         if (past.isEmpty()) return List.of();
 
-        // 과거 의뢰 전체 bids 한 번에 조회
-        List<Bid> allBids = bidRepository.findAllByAnnouncementIn(past);
+        List<Bid> selectedBids = bidRepository.findAllByAnnouncementInAndStatus(past, BidStatusEnum.SELECTED);
 
-        // 의뢰별 선정된 bid 맵 구성
-        Map<Long, Bid> selectedBidMap = allBids.stream()
-                .filter(b -> b.getStatus() == BidStatusEnum.SELECTED)
+        Map<Long, Bid> selectedBidMap = selectedBids.stream()
                 .collect(Collectors.toMap(
                         b -> b.getAnnouncement().getId(),
                         b -> b,
-                        (a, b) -> a  // 중복 시 첫 번째 유지
+                        (a, b) -> a
                 ));
 
         // 선정된 bid의 전문가 프로필 한 번에 조회
@@ -191,22 +155,42 @@ public class AnnouncementService {
                 .toList();
     }
 
+    @Transactional
+    public void closeAnnouncement(Long userId, String announcementCode) {
+        Announcement announcement = announcementRepository
+                .findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        if (!announcement.isOwnedBy(userId)) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
+        }
+
+        if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_CLOSEABLE);
+        }
+
+        if (announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_2_BID_CLOSED) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_CLOSEABLE);
+        }
+
+        if (!announcement.getClientInfo().isComplete()) {
+            throw new CustomException(ErrorCode.CLIENT_INFO_INCOMPLETE);
+        }
+
+        if (bidRepository.countByAnnouncement(announcement) == 0) {
+            throw new CustomException(ErrorCode.NO_BIDS_TO_CLOSE);
+        }
+
+        announcement.updateStatus(AnnouncementStatusEnum.CLOSED);
+        announcement.updateProgressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION);
+    }
+
     public AnnouncementDetailResponse getAnnouncementByCode(String announcementCode) {
         Announcement announcement = announcementRepository.findByAnnouncementCode(announcementCode)
                 .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
 
         List<Bid> bids = bidRepository.findAllByAnnouncement(announcement);
-
-        List<Long> expertUserIds = bids.stream()
-                .map(b -> b.getExpertUser().getId())
-                .toList();
-
-        Map<Long, ExpertProfile> profileMap = expertProfileRepository
-                .findByUserIdIn(expertUserIds)
-                .stream()
-                .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
-
-        return AnnouncementDetailResponse.from(announcement, bids, profileMap);
+        return AnnouncementDetailResponse.from(announcement, bids, buildProfileMap(bids));
     }
 
     private ClientInfo findClientInfo(Long clientInfoId) {

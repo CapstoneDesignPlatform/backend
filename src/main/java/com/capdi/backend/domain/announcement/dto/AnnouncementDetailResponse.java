@@ -2,7 +2,6 @@ package com.capdi.backend.domain.announcement.dto;
 
 import com.capdi.backend.domain.announcement.entity.Announcement;
 import com.capdi.backend.domain.announcement.entity.AnnouncementProgressStepEnum;
-import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
 import com.capdi.backend.domain.bid.entity.Bid;
 import com.capdi.backend.domain.bid.entity.BidStatusEnum;
 import com.capdi.backend.domain.client.entity.ClientInfo;
@@ -61,11 +60,12 @@ public class AnnouncementDetailResponse {
             Map<Long, ExpertProfile> expertProfileMap) {
 
         AnnouncementProgressStepEnum step = announcement.getProgressStep();
-        boolean isActive = announcement.getStatus() == AnnouncementStatusEnum.ACTIVE;
+        boolean isSelectionStep = step == AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION;
+        boolean showContact = step.ordinal() >= AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED.ordinal();
 
         List<BidDto> bidDtos = bids.stream()
-                .filter(b -> isActive || b.getStatus() == BidStatusEnum.SELECTED)
-                .map(b -> BidDto.from(b, expertProfileMap.get(b.getExpertUser().getId())))
+                .filter(b -> isSelectionStep || b.getStatus() == BidStatusEnum.SELECTED)
+                .map(b -> BidDto.from(b, expertProfileMap.get(b.getExpertUser().getId()), showContact))
                 .toList();
 
         return AnnouncementDetailResponse.builder()
@@ -107,7 +107,11 @@ public class AnnouncementDetailResponse {
 
         private String status;
 
-        public static BidDto from(Bid bid, ExpertProfile profile) {
+        private String phone;
+
+        private String email;
+
+        public static BidDto from(Bid bid, ExpertProfile profile, boolean includeContact) {
             return BidDto.builder()
                     .bidId(bid.getId())
                     .expertName(bid.getExpertUser().getName())
@@ -115,6 +119,8 @@ public class AnnouncementDetailResponse {
                     .bidAmount(bid.getBidAmount())
                     .finalAmount(bid.getFinalAmount())
                     .status(bid.getStatus().name())
+                    .phone(includeContact ? bid.getExpertUser().getPhone() : null)
+                    .email(includeContact ? bid.getExpertUser().getEmail() : null)
                     .build();
         }
     }

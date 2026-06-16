@@ -102,6 +102,10 @@ public class Announcement extends BaseTimeEntity {
         this.progressStep = newStep;
     }
 
+    public boolean isOwnedBy(Long userId) {
+        return this.user != null && this.user.getId().equals(userId);
+    }
+
     public String getDisplayTitle() {
         return industry.getLabel() + " " + purpose.getLabel();
     }

@@ -62,6 +62,17 @@ public class AnnouncementController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    @PatchMapping("/{announcementCode}/close")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "공고 마감", description = "기업정보가 완성된 경우에만 마감 가능합니다.")
+    public ResponseEntity<ApiResponse<Void>> closeAnnouncement(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String announcementCode) {
+
+        announcementService.closeAnnouncement(userDetails.getUserId(), announcementCode);
+        return ResponseEntity.ok(ApiResponse.ok("공고가 마감되었습니다.", null));
+    }
+
     @GetMapping("/my")
     @PreAuthorize("hasRole('CLIENT')")
     @Operation(summary = "마이페이지 의뢰 목록 조회", description = "현재 진행중인 의뢰 1건과 과거 의뢰 내역을 반환합니다.")

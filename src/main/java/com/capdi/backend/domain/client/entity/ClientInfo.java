@@ -65,4 +65,10 @@ public class ClientInfo extends BaseTimeEntity {
         this.website = website;
         this.description = description;
     }
+
+    public boolean isComplete() {
+        return companyName != null && !companyName.isBlank()
+                && businessNumber != null && !businessNumber.isBlank()
+                && address != null && !address.isBlank();
+    }
 }

@@ -44,6 +44,10 @@ public enum ErrorCode {
     JOB_POST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 잡포스트입니다."),
     ANNOUNCEMENT_CLOSED(HttpStatus.BAD_REQUEST, "마감된 공고입니다."),
     ANNOUNCEMENT_FORBIDDEN(HttpStatus.FORBIDDEN, "공고에 대한 권한이 없습니다."),
+    ANNOUNCEMENT_NOT_CLOSEABLE(HttpStatus.BAD_REQUEST, "마감 가능한 상태의 공고가 아닙니다."),
+    NO_BIDS_TO_CLOSE(HttpStatus.BAD_REQUEST, "입찰 신청이 없어 마감할 수 없습니다."),
+    ANNOUNCEMENT_NOT_IN_SELECTION_STEP(HttpStatus.BAD_REQUEST, "전문가 선택 가능한 상태의 공고가 아닙니다."),
+    CLIENT_INFO_INCOMPLETE(HttpStatus.BAD_REQUEST, "기업정보(상호명, 사업자등록번호, 주소)를 먼저 입력해주세요."),
     CODE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "의뢰 코드 생성에 실패했습니다. 다시 시도해주세요."),
     CURRENT_INDUSTRY_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "건설업 관련/비 건설업 관련 선택 시 상세 내용은 필수입니다."),
     DIAGNOSIS_REASON_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "진단 사유가 기타인 경우 상세 내용은 필수입니다."),
@@ -52,6 +56,7 @@ public enum ErrorCode {
     BID_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 입찰입니다."),
     BID_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 입찰에 참여했습니다."),
     BID_PRICE_TOO_LOW(HttpStatus.BAD_REQUEST, "입찰 가격이 최저가보다 낮습니다."),
+    BID_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 입찰입니다."),
 
     // 계약/결제
     CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 계약입니다."),
