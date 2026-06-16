@@ -55,7 +55,7 @@ public class ExpertVerificationStatusResponse {
         return value != null && !value.isBlank();
     }
 
-    @G```etter
+    @Getter
     @Builder
     public static class VerificationRequestDto {
 
