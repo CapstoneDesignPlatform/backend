@@ -35,6 +35,9 @@ public class Bid extends BaseTimeEntity {
     @Column(name = "bid_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal bidAmount;
 
+    @Column(name = "final_amount", precision = 15, scale = 2)
+    private BigDecimal finalAmount;
+
     @Column(name = "bid_start_date", nullable = false)
     private LocalDate bidStartDate;
 
@@ -44,6 +47,19 @@ public class Bid extends BaseTimeEntity {
 
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;
+
+    public void select(BigDecimal finalAmount) {
+        if (this.status == BidStatusEnum.PENDING) {
+            this.status = BidStatusEnum.SELECTED;
+            this.finalAmount = finalAmount;
+        }
+    }
+
+    public void reject() {
+        if (this.status == BidStatusEnum.PENDING) {
+            this.status = BidStatusEnum.REJECTED;
+        }
+    }
 
     public static Bid create(Announcement announcement, User expertUser, BigDecimal bidAmount) {
         return Bid.builder()

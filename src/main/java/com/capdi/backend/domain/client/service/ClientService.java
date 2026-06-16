@@ -1,5 +1,8 @@
 package com.capdi.backend.domain.client.service;
 
+import com.capdi.backend.domain.announcement.entity.AnnouncementProgressStepEnum;
+import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
+import com.capdi.backend.domain.announcement.repository.AnnouncementRepository;
 import com.capdi.backend.domain.client.dto.ClientInfoRequest;
 import com.capdi.backend.domain.client.dto.ClientInfoResponse;
 import com.capdi.backend.domain.client.entity.ClientInfo;
@@ -19,6 +22,7 @@ public class ClientService {
 
     private final ClientRepository clientRepository;
     private final UserRepository userRepository;
+    private final AnnouncementRepository announcementRepository;
 
     @Transactional
     public ClientInfoResponse saveGuestClientInfo(ClientInfoRequest request) {
@@ -76,6 +80,13 @@ public class ClientService {
                 request.getWebsite(),
                 request.getDescription()
         );
+
+        if (clientInfo.isComplete()) {
+            announcementRepository.findAllByClientInfo(clientInfo).stream()
+                    .filter(announcement -> announcement.getStatus() == AnnouncementStatusEnum.ACTIVE
+                            && announcement.getProgressStep() == AnnouncementProgressStepEnum.STEP_1_REGISTERED)
+                    .forEach(announcement -> announcement.updateProgressStep(AnnouncementProgressStepEnum.STEP_2_BID_CLOSED));
+        }
 
         return ClientInfoResponse.from(clientInfo);
     }

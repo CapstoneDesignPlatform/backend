@@ -28,6 +28,9 @@ public class ExpertCertificateResponse {
     @JsonProperty("issue_date")
     private LocalDate issueDate;
 
+    @JsonProperty("expiry_date")
+    private LocalDate expiryDate;
+
     @JsonProperty("expired_at")
     private LocalDate expiredAt;
 
@@ -42,6 +45,7 @@ public class ExpertCertificateResponse {
                 .certificateTypeCode(expertCertificate.getCertificateTypeCode().name())
                 .certificateNumber(expertCertificate.getCertificateNumber())
                 .issueDate(expertCertificate.getIssueDate())
+                .expiryDate(expertCertificate.getExpiryDate())
                 .expiredAt(expertCertificate.getExpiredAt())
                 .ownerName(expertCertificate.getOwnerName())
                 .build();

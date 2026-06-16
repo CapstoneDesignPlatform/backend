@@ -70,6 +70,7 @@ public class ExpertCertificateService {
                     request.getCertificateName(),
                     request.getCertificateNumber(),
                     request.getIssueDate(),
+                    request.getExpiryDate(),
                     request.getOwnerName()
             );
         } catch (IllegalArgumentException e) {
@@ -88,6 +89,7 @@ public class ExpertCertificateService {
                     request.getCertificateName(),
                     request.getCertificateNumber(),
                     request.getIssueDate(),
+                    request.getExpiryDate(),
                     request.getOwnerName()
             );
         } catch (IllegalArgumentException e) {

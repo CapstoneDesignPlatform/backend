@@ -89,8 +89,21 @@ public class Announcement extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private AnnouncementStatusEnum status = AnnouncementStatusEnum.ACTIVE;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "progress_step", nullable = false, length = 50)
+    private AnnouncementProgressStepEnum progressStep = AnnouncementProgressStepEnum.STEP_1_REGISTERED;
+
     public void updateStatus(AnnouncementStatusEnum newStatus) {
         this.status = newStatus;
+    }
+
+    public void updateProgressStep(AnnouncementProgressStepEnum newStep) {
+        this.progressStep = newStep;
+    }
+
+    public boolean isOwnedBy(Long userId) {
+        return this.user != null && this.user.getId().equals(userId);
     }
 
     public String getDisplayTitle() {

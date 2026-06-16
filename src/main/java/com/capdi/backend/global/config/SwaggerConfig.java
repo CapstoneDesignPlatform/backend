@@ -6,11 +6,17 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OperationCustomizer;
+import com.capdi.backend.global.jwt.CustomUserDetails;
+import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class SwaggerConfig {
+
+    static {
+        SpringDocUtils.getConfig().addRequestWrapperToIgnore(CustomUserDetails.class);
+    }
 
     private static final String SECURITY_SCHEME_NAME = "Bearer Authentication";
 
