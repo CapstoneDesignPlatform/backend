@@ -2,6 +2,8 @@ package com.capdi.backend.domain.bid.controller;
 
 import com.capdi.backend.domain.bid.dto.BidCreateRequest;
 import com.capdi.backend.domain.bid.dto.BidResponse;
+import com.capdi.backend.domain.bid.dto.ExpertSelectRequest;
+import com.capdi.backend.domain.bid.dto.ExpertSelectResponse;
 import com.capdi.backend.domain.bid.dto.MyBidResponse;
 import com.capdi.backend.domain.bid.service.BidService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
@@ -12,7 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -36,6 +40,19 @@ public class BidController {
         return ResponseEntity.ok(ApiResponse.ok(
                 bidService.getMyBids(userDetails.getUserId(), status, page, size, sort)
         ));
+    }
+
+    @PatchMapping("/announcements/{announcementCode}/bids/{bidId}/select")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<ApiResponse<ExpertSelectResponse>> selectExpert(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String announcementCode,
+            @PathVariable Long bidId,
+            @RequestBody @Valid ExpertSelectRequest request
+    ) {
+        ExpertSelectResponse response = bidService.selectExpert(
+                userDetails.getUserId(), announcementCode, bidId, request);
+        return ResponseEntity.ok(ApiResponse.ok("전문가가 선택되었습니다.", response));
     }
 
     @PostMapping("/expert/job-posts/{announcementCode}/bids")

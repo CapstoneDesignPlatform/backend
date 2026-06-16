@@ -63,11 +63,13 @@ public class ClientAnnouncementListResponse {
                 List<Bid> bids,
                 Map<Long, ExpertProfile> expertProfileMap) {
 
+            AnnouncementProgressStepEnum step = announcement.getProgressStep();
+            boolean isAfterSelection = step.ordinal() >= AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED.ordinal();
+
             List<BidExpertDto> bidDtos = bids.stream()
+                    .filter(bid -> !isAfterSelection || bid.getStatus() == BidStatusEnum.SELECTED)
                     .map(bid -> BidExpertDto.from(bid, expertProfileMap.get(bid.getExpertUser().getId())))
                     .toList();
-
-            AnnouncementProgressStepEnum step = announcement.getProgressStep();
 
             return CurrentAnnouncementDto.builder()
                     .id(announcement.getId())
@@ -190,7 +192,7 @@ public class ClientAnnouncementListResponse {
                     .email(bid.getExpertUser().getEmail())
                     .bidAmount(bid.getBidAmount())
                     .finalAmount(bid.getFinalAmount())
-                    .result(BidStatusEnum.SELECTED.name())
+                    .result(bid.getStatus().name())
                     .build();
         }
     }
