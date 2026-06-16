@@ -49,8 +49,10 @@ public class Bid extends BaseTimeEntity {
     private LocalDateTime submittedAt;
 
     public void select(BigDecimal finalAmount) {
-        this.status = BidStatusEnum.SELECTED;
-        this.finalAmount = finalAmount;
+        if (this.status == BidStatusEnum.PENDING) {
+            this.status = BidStatusEnum.SELECTED;
+            this.finalAmount = finalAmount;
+        }
     }
 
     public void reject() {

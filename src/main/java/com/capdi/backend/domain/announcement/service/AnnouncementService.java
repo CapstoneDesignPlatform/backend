@@ -165,6 +165,10 @@ public class AnnouncementService {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
         }
 
+        if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_CLOSEABLE);
+        }
+
         if (announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_2_BID_CLOSED) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_CLOSEABLE);
         }
