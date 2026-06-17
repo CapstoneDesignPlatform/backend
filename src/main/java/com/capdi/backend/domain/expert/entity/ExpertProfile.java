@@ -15,6 +15,9 @@ import java.time.LocalDateTime;
 @Builder
 public class ExpertProfile extends BaseTimeEntity {
 
+    public static final String DEFAULT_REJECTED_REASON =
+            "제출 서류를 확인할 수 없어 인증이 반려되었습니다. 제출 정보를 확인한 후 다시 신청해주세요.";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -51,6 +54,12 @@ public class ExpertProfile extends BaseTimeEntity {
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
 
+    @Column(name = "rejected_reason", length = 500)
+    private String rejectedReason;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
     public static ExpertProfile createDefault(User user, String businessName) {
         return ExpertProfile.builder()
                 .user(user)
@@ -73,15 +82,34 @@ public class ExpertProfile extends BaseTimeEntity {
         this.verificationStatus = VerificationStatusEnum.PENDING;
         this.isVerified = false;
         this.verifiedAt = null;
+        this.rejectedReason = null;
+        this.reviewedAt = null;
 
         if (specialty != null) {
             this.specialty = specialty;
         }
     }
 
-    public void updateVerificationStatus(VerificationStatusEnum verificationStatus) {
+    public void updateVerificationStatus(VerificationStatusEnum verificationStatus, String rejectedReason) {
+        LocalDateTime now = LocalDateTime.now();
+
         this.verificationStatus = verificationStatus;
         this.isVerified = verificationStatus == VerificationStatusEnum.APPROVED;
-        this.verifiedAt = this.isVerified ? LocalDateTime.now() : null;
+        this.verifiedAt = this.isVerified ? now : null;
+        this.reviewedAt = isReviewed(verificationStatus) ? now : null;
+        this.rejectedReason = verificationStatus == VerificationStatusEnum.REJECTED
+                ? resolveRejectedReason(rejectedReason)
+                : null;
+    }
+
+    private String resolveRejectedReason(String rejectedReason) {
+        return rejectedReason == null || rejectedReason.isBlank()
+                ? DEFAULT_REJECTED_REASON
+                : rejectedReason;
+    }
+
+    private boolean isReviewed(VerificationStatusEnum verificationStatus) {
+        return verificationStatus == VerificationStatusEnum.APPROVED
+                || verificationStatus == VerificationStatusEnum.REJECTED;
     }
 }
