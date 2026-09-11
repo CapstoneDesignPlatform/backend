@@ -24,13 +24,16 @@ public class ClientInfo extends BaseTimeEntity {
     @JoinColumn(name = "user_id", unique = true)
     private User user;
 
-    @Column(name = "representative_name", nullable = false, length = 50)
+    @Column(name = "representative_name", length = 50)
     private String representativeName;
+
+    @Column(name = "manager_name", length = 50)
+    private String managerName;
 
     @Column(nullable = false, length = 20)
     private String contact;
 
-    @Column(nullable = false, length = 100)
+    @Column(length = 100)
     private String email;
 
     @Column(name = "company_name", length = 100)

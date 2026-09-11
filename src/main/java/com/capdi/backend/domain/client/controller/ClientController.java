@@ -2,6 +2,7 @@ package com.capdi.backend.domain.client.controller;
 
 import com.capdi.backend.domain.client.dto.ClientInfoRequest;
 import com.capdi.backend.domain.client.dto.ClientInfoResponse;
+import com.capdi.backend.domain.client.dto.GuestClientInfoRequest;
 import com.capdi.backend.domain.client.service.ClientService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
@@ -26,7 +27,7 @@ public class ClientController {
     @PostMapping("/guest")
     @Operation(summary = "비회원 기업 정보 저장", description = "비회원이 기업 정보를 저장합니다.")
     public ResponseEntity<ApiResponse<ClientInfoResponse>> saveGuestClientInfo(
-            @RequestBody @Valid ClientInfoRequest request) {
+            @RequestBody @Valid GuestClientInfoRequest request) {
         ClientInfoResponse response = clientService.saveGuestClientInfo(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("기업 정보가 저장되었습니다.", response));

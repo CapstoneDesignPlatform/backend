@@ -1,0 +1,35 @@
+package com.capdi.backend.domain.client.dto;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Getter
+@NoArgsConstructor
+public class GuestClientInfoRequest {
+
+    @NotBlank(message = "담당자명은 필수입니다.")
+    private String managerName;
+
+    @NotBlank(message = "연락처는 필수입니다.")
+    @Pattern(regexp = "^\\d{2,3}-\\d{3,4}-\\d{4}$", message = "연락처 형식이 올바르지 않습니다.")
+    private String contact;
+
+    private String companyName;
+
+    private String representativeName;
+
+    @Email(message = "이메일 형식이 올바르지 않습니다.")
+    private String email;
+
+    @Pattern(regexp = "^\\d{3}-\\d{2}-\\d{5}$", message = "사업자등록번호 형식이 올바르지 않습니다.")
+    private String businessNumber;
+
+    private String address;
+
+    private String website;
+
+    private String description;
+}
