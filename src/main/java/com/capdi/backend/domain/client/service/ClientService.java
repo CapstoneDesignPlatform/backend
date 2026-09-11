@@ -5,6 +5,7 @@ import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
 import com.capdi.backend.domain.announcement.repository.AnnouncementRepository;
 import com.capdi.backend.domain.client.dto.ClientInfoRequest;
 import com.capdi.backend.domain.client.dto.ClientInfoResponse;
+import com.capdi.backend.domain.client.dto.GuestClientInfoRequest;
 import com.capdi.backend.domain.client.entity.ClientInfo;
 import com.capdi.backend.domain.client.repository.ClientRepository;
 import com.capdi.backend.domain.user.entity.User;
@@ -25,12 +26,13 @@ public class ClientService {
     private final AnnouncementRepository announcementRepository;
 
     @Transactional
-    public ClientInfoResponse saveGuestClientInfo(ClientInfoRequest request) {
+    public ClientInfoResponse saveGuestClientInfo(GuestClientInfoRequest request) {
         ClientInfo clientInfo = ClientInfo.builder()
                 .user(null)
-                .representativeName(request.getRepresentativeName())
+                .managerName(request.getManagerName())
+                .representativeName(normalizeOptional(request.getRepresentativeName()))
                 .contact(request.getContact())
-                .email(request.getEmail())
+                .email(normalizeOptional(request.getEmail()))
                 .companyName(request.getCompanyName())
                 .businessNumber(request.getBusinessNumber())
                 .address(request.getAddress())
@@ -39,6 +41,10 @@ public class ClientService {
                 .build();
 
         return ClientInfoResponse.from(clientRepository.save(clientInfo));
+    }
+
+    private String normalizeOptional(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     @Transactional
