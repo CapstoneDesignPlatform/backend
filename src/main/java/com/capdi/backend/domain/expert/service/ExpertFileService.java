@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import com.capdi.backend.domain.expert.util.FileVerificationUtil;
+import com.capdi.backend.domain.expert.util.PdfSecurityValidator;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -40,19 +41,41 @@ public class ExpertFileService {
     private static final String UPLOAD_DIR =
             System.getProperty("user.dir") + "/uploads/files";
 
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
     private final ExpertFileRepository expertFileRepository;
     private final ExpertProfileRepository expertProfileRepository;
     private final ExpertCertificateRepository expertCertificateRepository;
     private final BusinessRegistrationInfoRepository businessRegistrationInfoRepository;
     private final GoogleVisionOcrClient googleVisionOcrClient;
     private final FileVerificationUtil fileVerificationUtil;
+    private final PdfSecurityValidator pdfSecurityValidator;
 
     @Transactional
     public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
+
+        log.info("[FILE UPLOAD] START filename={}, contentType={}, size={}, purpose={}",
+                file != null ? file.getOriginalFilename() : null,
+                file != null ? file.getContentType() : null,
+                file != null ? file.getSize() : null,
+                purpose);
+
         validateUploadRequest(file, purpose);
+        log.info("[FILE UPLOAD] 1. validateUploadRequest PASS");
 
         ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
+        log.info("[FILE UPLOAD] 2. getMyExpertProfile PASS");
+
         MimeTypeEnum mimeType = parseMimeType(file);
+        log.info("[FILE UPLOAD] 3. parseMimeType PASS: {}", mimeType);
+
+        validateFileSignature(file, mimeType);
+        log.info("[FILE UPLOAD] 4. validateFileSignature PASS");
+
+        if (mimeType == MimeTypeEnum.PDF) {
+            pdfSecurityValidator.validate(file);
+            log.info("[FILE UPLOAD] 5. PdfSecurityValidator PASS");
+        }
 
         try {
             Path uploadDir = Paths.get(UPLOAD_DIR);
@@ -63,6 +86,8 @@ public class ExpertFileService {
             Path savePath = uploadDir.resolve(storedName).toAbsolutePath().normalize();
 
             file.transferTo(savePath.toFile());
+
+            log.info("[FILE UPLOAD] 6. Physical file save PASS: {}", savePath);
 
             ExpertFile expertFile = ExpertFile.builder()
                     .expertProfile(expertProfile)
@@ -76,13 +101,20 @@ public class ExpertFileService {
 
             ExpertFile savedFile = expertFileRepository.save(expertFile);
 
+            log.info("[FILE UPLOAD] 7. DB save PASS: fileId={}", savedFile.getId());
+
             return ExpertFileUploadResponse.from(savedFile);
 
         } catch (Exception e) {
+
+            log.error("[FILE UPLOAD] SAVE FAILED type={}, message={}",
+                    e.getClass().getName(),
+                    e.getMessage(),
+                    e);
+
             throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
     }
-
     @Transactional
     public void runOcr(Long loginUserId, Long fileId) {
         ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
@@ -146,8 +178,58 @@ public class ExpertFileService {
         if (file == null || file.isEmpty()) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
+
+        String originalFilename = file.getOriginalFilename();
+
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
+
+        if (originalFilename.contains("..")
+                || originalFilename.contains("/")
+                || originalFilename.contains("\\")) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
 
         parseFileType(purpose);
+    }
+    private void validateFileSignature(MultipartFile file, MimeTypeEnum mimeType) {
+        try {
+            byte[] header = file.getInputStream().readNBytes(8);
+
+            boolean valid = switch (mimeType) {
+                case PDF -> header.length >= 4
+                        && header[0] == 0x25
+                        && header[1] == 0x50
+                        && header[2] == 0x44
+                        && header[3] == 0x46;
+
+                case JPG -> header.length >= 3
+                        && (header[0] & 0xFF) == 0xFF
+                        && (header[1] & 0xFF) == 0xD8
+                        && (header[2] & 0xFF) == 0xFF;
+
+                case PNG -> header.length >= 8
+                        && (header[0] & 0xFF) == 0x89
+                        && header[1] == 0x50
+                        && header[2] == 0x4E
+                        && header[3] == 0x47
+                        && header[4] == 0x0D
+                        && header[5] == 0x0A
+                        && header[6] == 0x1A
+                        && header[7] == 0x0A;
+            };
+
+            if (!valid) {
+                throw new CustomException(ErrorCode.INVALID_INPUT);
+            }
+
+        } catch (IOException e) {
+            throw new CustomException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     private FileTypeEnum parseFileType(String purpose) {
