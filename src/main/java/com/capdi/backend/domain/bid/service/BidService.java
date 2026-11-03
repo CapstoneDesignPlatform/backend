@@ -129,6 +129,10 @@ public class BidService {
 
         selectedBid.select(request.getFinalAmount());
 
+        ExpertProfile selectedExpert = expertProfileRepository.findByUserId(selectedBid.getExpertUser().getId())
+                .orElseThrow(() -> new CustomException(ErrorCode.EXPERT_PROFILE_NOT_FOUND));
+        selectedExpert.incrementSelectedCount();
+
         bidRepository.rejectAllPendingExcept(announcement, bidId, BidStatusEnum.REJECTED, BidStatusEnum.PENDING);
 
         announcement.updateProgressStep(AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED);

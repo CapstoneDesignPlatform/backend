@@ -46,10 +46,16 @@ public class JobPostDetailResponse {
     @JsonProperty("current_industry")
     private CurrentIndustryStatusEnum currentIndustry;
 
+    @JsonProperty("current_industry_detail")
+    private String currentIndustryDetail;
+
     @JsonProperty("current_license")
     private String currentLicense;
 
     private DiagnosisReasonEnum reason;
+
+    @JsonProperty("diagnosis_reason_detail")
+    private String diagnosisReasonDetail;
 
     private BigDecimal capital;
 
@@ -97,8 +103,10 @@ public class JobPostDetailResponse {
                         : (announcement.getCategory() == null ? null : announcement.getCategory().name()))
                 .requiredLicense(announcement == null ? null : announcement.getRequiredLicense())
                 .currentIndustry(announcement == null ? null : announcement.getCurrentIndustry())
+                .currentIndustryDetail(announcement == null ? null : announcement.getCurrentIndustryDetail())
                 .currentLicense(announcement == null ? null : announcement.getCurrentLicense())
                 .reason(announcement == null ? null : announcement.getDiagnosisReason())
+                .diagnosisReasonDetail(announcement == null ? null : announcement.getDiagnosisReasonDetail())
                 .capital(announcement == null ? null : announcement.getCapital())
                 .capitalScale(announcement == null ? null : announcement.getCapitalScale())
                 .bidCount(bidCount)
@@ -128,8 +136,10 @@ public class JobPostDetailResponse {
                 .classification(announcement.getCategory() == null ? null : announcement.getCategory().name())
                 .requiredLicense(announcement.getRequiredLicense())
                 .currentIndustry(announcement.getCurrentIndustry())
+                .currentIndustryDetail(announcement.getCurrentIndustryDetail())
                 .currentLicense(announcement.getCurrentLicense())
                 .reason(announcement.getDiagnosisReason())
+                .diagnosisReasonDetail(announcement.getDiagnosisReasonDetail())
                 .capital(announcement.getCapital())
                 .capitalScale(announcement.getCapitalScale())
                 .bidCount(bidCount)

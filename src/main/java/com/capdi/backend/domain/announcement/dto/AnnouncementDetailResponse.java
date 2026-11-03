@@ -41,6 +41,9 @@ public class AnnouncementDetailResponse {
     @JsonProperty("capital_scale")
     private BigDecimal capitalScale;
 
+    @JsonProperty("capital")
+    private BigDecimal capital;
+
     private String status;
 
     @JsonProperty("progress_step")
@@ -78,6 +81,7 @@ public class AnnouncementDetailResponse {
                 .currentIndustry(announcement.getCurrentIndustry() != null
                         ? announcement.getCurrentIndustry().getLabel() : null)
                 .capitalScale(announcement.getCapitalScale())
+                .capital(announcement.getCapital())
                 .status(announcement.getStatus().name())
                 .progressStep(step.getStepNumber())
                 .progressStepLabel(step.getLabel())
