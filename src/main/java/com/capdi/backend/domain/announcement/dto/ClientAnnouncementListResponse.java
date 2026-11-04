@@ -48,6 +48,9 @@ public class ClientAnnouncementListResponse {
         @JsonProperty("capital_scale")
         private BigDecimal capitalScale;
 
+        @JsonProperty("capital")
+        private BigDecimal capital;
+
         private String status;
 
         @JsonProperty("progress_step")
@@ -80,6 +83,7 @@ public class ClientAnnouncementListResponse {
                     .businessOwnerType(announcement.getBusinessOwnerType().getLabel())
                     .requiredLicense(announcement.getRequiredLicense())
                     .capitalScale(announcement.getCapitalScale())
+                    .capital(announcement.getCapital())
                     .status(announcement.getStatus().name())
                     .progressStep(step.getStepNumber())
                     .progressStepLabel(step.getLabel())
@@ -143,6 +147,9 @@ public class ClientAnnouncementListResponse {
         @JsonProperty("capital_scale")
         private BigDecimal capitalScale;
 
+        @JsonProperty("capital")
+        private BigDecimal capital;
+
         private String status;
 
         @JsonProperty("selected_bid")
@@ -157,6 +164,7 @@ public class ClientAnnouncementListResponse {
                     .purpose(announcement.getPurpose().getLabel())
                     .requiredLicense(announcement.getRequiredLicense())
                     .capitalScale(announcement.getCapitalScale())
+                    .capital(announcement.getCapital())
                     .status(announcement.getStatus().name())
                     .selectedBid(selectedBid != null ? SelectedBidDto.from(selectedBid, profile) : null)
                     .build();

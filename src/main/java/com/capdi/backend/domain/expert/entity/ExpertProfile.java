@@ -78,6 +78,11 @@ public class ExpertProfile extends BaseTimeEntity {
             this.businessName = businessName;
         }
     }
+
+    public void incrementSelectedCount() {
+        this.selectedCount++;
+    }
+
     public void applyVerification(String specialty) {
         this.verificationStatus = VerificationStatusEnum.PENDING;
         this.isVerified = false;
