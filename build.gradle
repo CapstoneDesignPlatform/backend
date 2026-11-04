@@ -37,6 +37,9 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testRuntimeOnly 'com.h2database:h2'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:mysql'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 	implementation 'com.google.cloud:google-cloud-vision:3.58.0'
 	implementation 'com.google.protobuf:protobuf-java:3.25.5'
@@ -44,5 +47,15 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	useJUnitPlatform { excludeTags 'mysql-integration' }
+}
+
+tasks.register('mysqlIntegrationTest', Test) {
+	description = 'Runs isolated MySQL/Flyway/JPA upload integration tests (Docker required).'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform { includeTags 'mysql-integration' }
+	outputs.upToDateWhen { false }
+	shouldRunAfter tasks.named('test')
 }

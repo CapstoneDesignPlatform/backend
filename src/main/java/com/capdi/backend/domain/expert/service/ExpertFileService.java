@@ -30,16 +30,12 @@ import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Slf4j
 public class ExpertFileService {
-
-    private static final String UPLOAD_DIR =
-            System.getProperty("user.dir") + "/uploads/files";
 
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -50,6 +46,7 @@ public class ExpertFileService {
     private final GoogleVisionOcrClient googleVisionOcrClient;
     private final FileVerificationUtil fileVerificationUtil;
     private final PdfSecurityValidator pdfSecurityValidator;
+    private final ExpertFileStorage expertFileStorage;
 
     @Transactional
     public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
@@ -77,22 +74,24 @@ public class ExpertFileService {
             log.info("[FILE UPLOAD] 5. PdfSecurityValidator PASS");
         }
 
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+
+        Path savePath = null;
         try {
-            Path uploadDir = Paths.get(UPLOAD_DIR);
-            Files.createDirectories(uploadDir);
-
             String originalName = file.getOriginalFilename();
-            String storedName = UUID.randomUUID() + "_" + originalName;
-            Path savePath = uploadDir.resolve(storedName).toAbsolutePath().normalize();
-
-            file.transferTo(savePath.toFile());
+            savePath = expertFileStorage.create(originalName);
+            registerUploadCleanup(savePath);
+            expertFileStorage.write(file, savePath);
 
             log.info("[FILE UPLOAD] 6. Physical file save PASS: {}", savePath);
 
             ExpertFile expertFile = ExpertFile.builder()
                     .expertProfile(expertProfile)
                     .originalName(originalName)
-                    .storedName(storedName)
+                    .storedName(savePath.getFileName().toString())
                     .filePath(savePath.toString())
                     .fileSize(file.getSize())
                     .mimeType(mimeType)
@@ -100,20 +99,34 @@ public class ExpertFileService {
                     .build();
 
             ExpertFile savedFile = expertFileRepository.save(expertFile);
+            expertFileRepository.flush();
 
             log.info("[FILE UPLOAD] 7. DB save PASS: fileId={}", savedFile.getId());
 
             return ExpertFileUploadResponse.from(savedFile);
 
-        } catch (Exception e) {
-
-            log.error("[FILE UPLOAD] SAVE FAILED type={}, message={}",
-                    e.getClass().getName(),
-                    e.getMessage(),
-                    e);
-
-            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR);
+        } catch (IOException e) {
+            if (savePath != null) {
+                expertFileStorage.deleteQuietly(savePath);
+            }
+            log.error("Failed to store uploaded file", e);
+            CustomException failure = new CustomException(ErrorCode.FILE_STORAGE_FAILED);
+            failure.initCause(e);
+            throw failure;
         }
+    }
+
+    private void registerUploadCleanup(Path path) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    expertFileStorage.deleteQuietly(path);
+                } else if (status == STATUS_UNKNOWN) {
+                    log.error("Upload transaction outcome unknown; retaining file for reconciliation. path={}", path);
+                }
+            }
+        });
     }
     @Transactional
     public void runOcr(Long loginUserId, Long fileId) {
@@ -197,8 +210,8 @@ public class ExpertFileService {
         parseFileType(purpose);
     }
     private void validateFileSignature(MultipartFile file, MimeTypeEnum mimeType) {
-        try {
-            byte[] header = file.getInputStream().readNBytes(8);
+        try (var input = file.getInputStream()) {
+            byte[] header = input.readNBytes(8);
 
             boolean valid = switch (mimeType) {
                 case PDF -> header.length >= 4
@@ -277,7 +290,7 @@ public class ExpertFileService {
         Runnable deletePhysicalFile = () -> {
             try {
                 Files.deleteIfExists(Path.of(expertFile.getFilePath()));
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
                 log.warn("Failed to delete replaced file from disk. fileId={}, path={}",
                         expertFile.getId(), expertFile.getFilePath(), e);
             }
