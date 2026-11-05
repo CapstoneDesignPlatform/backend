@@ -4,6 +4,7 @@ import com.capdi.backend.domain.announcement.dto.AnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.dto.AnnouncementCreateResponse;
 import com.capdi.backend.domain.announcement.dto.AnnouncementDetailResponse;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse;
+import com.capdi.backend.domain.announcement.dto.GuestAnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse.CurrentAnnouncementDto;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse.PastAnnouncementDto;
 import com.capdi.backend.domain.announcement.entity.Announcement;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,25 +48,27 @@ public class AnnouncementService {
     private static final int MAX_RETRY_COUNT = 3;
 
     public AnnouncementCreateResponse createAnnouncement(AnnouncementCreateRequest request, Long userId) {
-        ClientInfo clientInfo = findClientInfo(request.getClientInfoId());
+        ClientInfo clientInfo = clientRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CLIENT_INFO_NOT_FOUND));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
-        return generateAndSave(request, user, clientInfo);
+        return saveWithGeneratedCode(clientInfo.getContact(),
+                code -> announcementSaverService.save(request, user, clientInfo, code));
     }
 
-    public AnnouncementCreateResponse createGuestAnnouncement(AnnouncementCreateRequest request) {
-        ClientInfo clientInfo = findClientInfo(request.getClientInfoId());
-        return generateAndSave(request, null, clientInfo);
+    public AnnouncementCreateResponse createGuestAnnouncement(GuestAnnouncementCreateRequest request) {
+        return saveWithGeneratedCode(request.getClientInfo().getContact(),
+                code -> announcementSaverService.saveGuest(request.getAnnouncement(), request.getClientInfo(), code));
     }
 
-    private AnnouncementCreateResponse generateAndSave(
-            AnnouncementCreateRequest request, User user, ClientInfo clientInfo) {
+    private AnnouncementCreateResponse saveWithGeneratedCode(
+            String contact, Function<String, AnnouncementCreateResponse> save) {
 
         for (int attempt = 0; attempt < MAX_RETRY_COUNT; attempt++) {
             try {
-                String code = generateAnnouncementCode(clientInfo.getContact());
-                return announcementSaverService.save(request, user, clientInfo, code);
+                String code = generateAnnouncementCode(contact);
+                return save.apply(code);
             } catch (DataIntegrityViolationException e) {
                 if (attempt == MAX_RETRY_COUNT - 1) {
                     throw new CustomException(ErrorCode.CODE_GENERATION_FAILED);
@@ -165,6 +169,23 @@ public class AnnouncementService {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
         }
 
+        closeLockedAnnouncement(announcement);
+    }
+
+    @Transactional
+    public void closeAnnouncementAsAdmin(String announcementCode) {
+        Announcement announcement = announcementRepository
+                .findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        if (announcement.getStatus() == AnnouncementStatusEnum.CLOSED) {
+            return;
+        }
+
+        closeLockedAnnouncement(announcement);
+    }
+
+    private void closeLockedAnnouncement(Announcement announcement) {
         if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_CLOSEABLE);
         }
@@ -193,8 +214,4 @@ public class AnnouncementService {
         return AnnouncementDetailResponse.from(announcement, bids, buildProfileMap(bids));
     }
 
-    private ClientInfo findClientInfo(Long clientInfoId) {
-        return clientRepository.findById(clientInfoId)
-                .orElseThrow(() -> new CustomException(ErrorCode.CLIENT_INFO_NOT_FOUND));
-    }
 }

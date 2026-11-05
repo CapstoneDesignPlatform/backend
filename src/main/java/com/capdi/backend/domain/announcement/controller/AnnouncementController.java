@@ -4,6 +4,7 @@ import com.capdi.backend.domain.announcement.dto.AnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.dto.AnnouncementCreateResponse;
 import com.capdi.backend.domain.announcement.dto.AnnouncementDetailResponse;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse;
+import com.capdi.backend.domain.announcement.dto.GuestAnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.service.AnnouncementService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
@@ -27,7 +28,7 @@ public class AnnouncementController {
 
     @PostMapping
     @PreAuthorize("hasRole('CLIENT')")
-    @Operation(summary = "회원 공고 등록")
+    @Operation(summary = "회원 공고 등록", description = "로그인한 회원의 기업 정보를 사용합니다. 기업 정보가 없으면 먼저 등록해야 합니다.")
     public ResponseEntity<ApiResponse<AnnouncementCreateResponse>> createAnnouncement(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestBody @Valid AnnouncementCreateRequest request) {
@@ -40,9 +41,9 @@ public class AnnouncementController {
     }
 
     @PostMapping("/guest")
-    @Operation(summary = "비회원 공고 등록")
+    @Operation(summary = "비회원 공고 등록", description = "기업 정보(clientInfo)와 공고 정보(announcement)를 함께 저장합니다.")
     public ResponseEntity<ApiResponse<AnnouncementCreateResponse>> createGuestAnnouncement(
-            @RequestBody @Valid AnnouncementCreateRequest request) {
+            @RequestBody @Valid GuestAnnouncementCreateRequest request) {
 
         AnnouncementCreateResponse response =
                 announcementService.createGuestAnnouncement(request);

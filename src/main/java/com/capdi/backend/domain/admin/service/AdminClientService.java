@@ -3,7 +3,9 @@ package com.capdi.backend.domain.admin.service;
 import com.capdi.backend.domain.admin.dto.*;
 import com.capdi.backend.domain.announcement.entity.Announcement;
 import com.capdi.backend.domain.announcement.entity.AnnouncementStatusEnum;
+import com.capdi.backend.domain.announcement.entity.AnnouncementProgressStepEnum;
 import com.capdi.backend.domain.announcement.repository.AnnouncementRepository;
+import com.capdi.backend.domain.announcement.service.AnnouncementService;
 import com.capdi.backend.domain.bid.entity.Bid;
 import com.capdi.backend.domain.bid.repository.BidRepository;
 import com.capdi.backend.domain.client.entity.ClientInfo;
@@ -30,6 +32,7 @@ public class AdminClientService {
     private final ClientRepository clientRepository;
     private final AnnouncementRepository announcementRepository;
     private final BidRepository bidRepository;
+    private final AnnouncementService announcementService;
 
     // 의뢰인 전체 목록 조회 (페이징)
     public Page<AdminClientSummaryResponse> getClientList(Pageable pageable) {
@@ -93,8 +96,24 @@ public class AdminClientService {
     // 공고 상태 변경
     @Transactional
     public void updateAnnouncementStatus(String announcementCode, AnnouncementStatusEnum newStatus) {
-        Announcement announcement = announcementRepository.findByAnnouncementCode(announcementCode)
+        if (newStatus == AnnouncementStatusEnum.CLOSED) {
+            announcementService.closeAnnouncementAsAdmin(announcementCode);
+            return;
+        }
+
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
                 .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        if (announcement.getStatus() == newStatus) {
+            return;
+        }
+
+        if (newStatus != AnnouncementStatusEnum.CANCELLED
+                || announcement.getStatus() == AnnouncementStatusEnum.CANCELLED
+                || announcement.getProgressStep().getStepNumber()
+                    >= AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED.getStepNumber()) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_INVALID_STATUS_TRANSITION);
+        }
 
         announcement.updateStatus(newStatus);
     }
