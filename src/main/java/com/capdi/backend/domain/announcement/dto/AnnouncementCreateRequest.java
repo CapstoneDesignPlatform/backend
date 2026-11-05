@@ -16,9 +16,6 @@ import java.math.BigDecimal;
 public class AnnouncementCreateRequest {
 
     //공통 필드
-    @NotNull(message = "기업 정보 ID는 필수입니다.")
-    private Long clientInfoId;
-
     @NotNull(message = "업종은 필수입니다.")
     private IndustryTypeEnum industry;
 

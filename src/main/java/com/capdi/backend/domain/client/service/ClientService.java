@@ -82,9 +82,8 @@ public class ClientService {
         );
 
         if (clientInfo.isComplete()) {
-            announcementRepository.findAllByClientInfo(clientInfo).stream()
-                    .filter(announcement -> announcement.getStatus() == AnnouncementStatusEnum.ACTIVE
-                            && announcement.getProgressStep() == AnnouncementProgressStepEnum.STEP_1_REGISTERED)
+            announcementRepository.findAllForProgressUpdateWithLock(
+                            clientInfo, AnnouncementStatusEnum.ACTIVE, AnnouncementProgressStepEnum.STEP_1_REGISTERED)
                     .forEach(announcement -> announcement.updateProgressStep(AnnouncementProgressStepEnum.STEP_2_BID_CLOSED));
         }
 
