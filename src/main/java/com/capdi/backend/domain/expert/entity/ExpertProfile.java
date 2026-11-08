@@ -4,10 +4,12 @@ import com.capdi.backend.domain.user.entity.User;
 import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
 @Entity
+@DynamicUpdate
 @Table(name = "expert_profiles")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

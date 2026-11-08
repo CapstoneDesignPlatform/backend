@@ -48,6 +48,7 @@ public enum ErrorCode {
     ANNOUNCEMENT_NOT_CLOSEABLE(HttpStatus.BAD_REQUEST, "마감 가능한 상태의 공고가 아닙니다."),
     NO_BIDS_TO_CLOSE(HttpStatus.BAD_REQUEST, "입찰 신청이 없어 마감할 수 없습니다."),
     ANNOUNCEMENT_NOT_IN_SELECTION_STEP(HttpStatus.BAD_REQUEST, "전문가 선택 가능한 상태의 공고가 아닙니다."),
+    ANNOUNCEMENT_INVALID_STATUS_TRANSITION(HttpStatus.CONFLICT, "공고 상태를 변경할 수 없습니다. 취소된 공고는 재개할 수 없으며, 전문가 선정 이후에는 일반 취소가 불가능합니다."),
     CLIENT_INFO_INCOMPLETE(HttpStatus.BAD_REQUEST, "기업정보(상호명, 사업자등록번호, 주소)를 먼저 입력해주세요."),
     CODE_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "의뢰 코드 생성에 실패했습니다. 다시 시도해주세요."),
     CURRENT_INDUSTRY_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "건설업 관련/비 건설업 관련 선택 시 상세 내용은 필수입니다."),

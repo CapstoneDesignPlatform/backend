@@ -6,6 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import com.capdi.backend.domain.announcement.entity.Announcement;
@@ -24,11 +26,19 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
 
     Optional<Bid> findByAnnouncementAndExpertUserId(Announcement announcement, Long expertUserId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Bid b WHERE b.announcement = :announcement AND b.expertUser.id = :expertUserId")
+    Optional<Bid> findByAnnouncementAndExpertUserIdWithLock(
+            @Param("announcement") Announcement announcement, @Param("expertUserId") Long expertUserId);
+
     List<Bid> findAllByAnnouncement(Announcement announcement);
     List<Bid> findAllByAnnouncementIn(List<Announcement> announcements);
     List<Bid> findAllByAnnouncementInAndStatus(List<Announcement> announcements, BidStatusEnum status);
     Optional<Bid> findByIdAndAnnouncement(Long id, Announcement announcement);
     int countByAnnouncement(Announcement announcement);
+
+    @Query(value = "SELECT COUNT(*) FROM bids WHERE announcement_code = :code FOR UPDATE", nativeQuery = true)
+    long countByAnnouncementCodeWithLock(@Param("code") String code);
 
     @Modifying
     @Query("UPDATE Bid b SET b.status = :rejected " +
