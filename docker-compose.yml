@@ -12,10 +12,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google-vision-key.json
+      FILE_STORAGE_UPLOAD_DIR: /app/uploads/files
       TZ: Asia/Seoul
 
     volumes:
       - ./secrets/google-vision-key.json:/app/secrets/google-vision-key.json
+      - uploads_data:/app/uploads/files
     ports:
       - "8080:8080"
     depends_on:
@@ -46,6 +48,7 @@ services:
 
 volumes:
   mysql_data:
+  uploads_data:
 
 networks:
   capdi-net:
