@@ -1,5 +1,11 @@
 package com.capdi.backend.domain.expert.service;
 
+import org.springframework.transaction.annotation.Propagation;
+
+import com.capdi.backend.domain.expert.dto.ExpertFileOcrResponse;
+
+import com.capdi.backend.domain.expert.entity.OcrStatusEnum;
+
 import com.capdi.backend.domain.expert.client.GoogleVisionOcrClient;
 import com.capdi.backend.domain.expert.dto.ExpertFileDownloadUrlResponse;
 import com.capdi.backend.domain.expert.dto.ExpertFileUploadResponse;
@@ -47,6 +53,7 @@ public class ExpertFileService {
     private final FileVerificationUtil fileVerificationUtil;
     private final PdfSecurityValidator pdfSecurityValidator;
     private final ExpertFileStorage expertFileStorage;
+    private final ExpertOcrPersistenceService ocrPersistence;
 
     @Transactional
     public ExpertFileUploadResponse uploadFile(Long loginUserId, MultipartFile file, String purpose) {
@@ -128,28 +135,32 @@ public class ExpertFileService {
             }
         });
     }
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void runOcr(Long loginUserId, Long fileId) {
-        ExpertProfile expertProfile = getMyExpertProfile(loginUserId);
-        ExpertFile expertFile = getOwnedFile(fileId, expertProfile);
-
+        var attempt = ocrPersistence.start(loginUserId, fileId);
+        String text;
         try {
-            String ocrResult = googleVisionOcrClient.requestOcr(
-                    expertFile.getFilePath()
-            );
-
-            expertFile.completeOcr(ocrResult);
-
-        } catch (Exception e) {
-            log.error("OCR failed. fileId={}, path={}, errorType={}, message={}",
-                    fileId,
-                    expertFile.getFilePath(),
-                    e.getClass().getName(),
-                    e.getMessage(),
-                    e
-            );
-            expertFile.failOcr("OCR processing failed.");
+            text = googleVisionOcrClient.requestOcr(attempt.path(), attempt.mimeType());
+        } catch (Exception failure) {
+            ErrorCode code = failure instanceof CustomException custom
+                    && custom.getErrorCode() == ErrorCode.OCR_TIMEOUT ? ErrorCode.OCR_TIMEOUT : ErrorCode.OCR_FAILED;
+            try {
+                ocrPersistence.finish(loginUserId, attempt, null,
+                        OcrStatusEnum.FAILED, code);
+            } catch (Exception persistenceFailure) {
+                log.warn("Could not persist OCR failure. fileId={}", fileId);
+            }
+            throw new CustomException(code);
         }
+        boolean empty = text == null || text.isBlank();
+        ocrPersistence.finish(loginUserId, attempt, text, empty
+                ? OcrStatusEnum.EMPTY
+                : OcrStatusEnum.SUCCEEDED, empty ? ErrorCode.OCR_EMPTY : null);
+        if (empty) throw new CustomException(ErrorCode.OCR_EMPTY);
+    }
+
+    public ExpertFileOcrResponse getOcrStatus(Long loginUserId, Long fileId) {
+        return ocrPersistence.status(loginUserId, fileId);
     }
 
     public ExpertFileDownloadUrlResponse getDownloadUrl(Long loginUserId, Long fileId) {

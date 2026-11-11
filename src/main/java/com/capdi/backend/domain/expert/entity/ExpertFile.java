@@ -1,5 +1,7 @@
 package com.capdi.backend.domain.expert.entity;
 
+import java.time.LocalDateTime;
+
 import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,6 +23,7 @@ import jakarta.persistence.Lob;
 
 @Entity
 @Table(name = "files")
+@org.hibernate.annotations.DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -67,15 +70,39 @@ public class ExpertFile extends BaseTimeEntity {
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
 
-    public void completeOcr(String ocrRawText) {
-        this.ocrRawText = ocrRawText;
-        this.verificationStatus = FileVerificationStatusEnum.OCR_COMPLETED;
-        this.rejectReason = null;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ocr_status", nullable = false, length = 20)
+    @Builder.Default
+    private OcrStatusEnum ocrStatus = OcrStatusEnum.NOT_RUN;
+    @Column(name = "ocr_run_token", length = 36)
+    private String ocrRunToken;
+    @Column(name = "ocr_started_at")
+    private LocalDateTime ocrStartedAt;
+    @Column(name = "ocr_finished_at")
+    private LocalDateTime ocrFinishedAt;
+    @Column(name = "ocr_revision", nullable = false)
+    @Builder.Default
+    private long ocrRevision = 0;
+    @Column(name = "ocr_error_code", length = 50)
+    private String ocrErrorCode;
+
+    public void startOcr(String token, LocalDateTime now) {
+        ocrStatus = OcrStatusEnum.RUNNING;
+        ocrRunToken = token;
+        ocrStartedAt = now;
+        ocrFinishedAt = null;
+        ocrErrorCode = null;
+        ocrRevision++;
+        // An earlier successful attempt is not valid input for this execution.
+        ocrRawText = null;
     }
 
-    public void failOcr(String rejectReason) {
-        this.verificationStatus = FileVerificationStatusEnum.FAILED;
-        this.rejectReason = rejectReason;
+    public void finishOcr(String text, OcrStatusEnum status, String errorCode) {
+        ocrRawText = status == OcrStatusEnum.SUCCEEDED ? text : null;
+        ocrStatus = status;
+        ocrErrorCode = errorCode;
+        ocrFinishedAt = LocalDateTime.now();
+        ocrRunToken = null;
     }
 
     public void approveVerification() {
