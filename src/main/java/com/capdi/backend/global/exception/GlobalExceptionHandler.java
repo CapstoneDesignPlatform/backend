@@ -12,10 +12,13 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final String INVALID_VALUE_MESSAGE = "올바르지 않은 값입니다.";
 
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException e) {
@@ -41,7 +44,9 @@ public class GlobalExceptionHandler {
         BindingResult bindingResult = e.getBindingResult();
 
         String message = bindingResult.getFieldErrors().stream()
-                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .map(error -> error.getField() + ": " + (error.isBindingFailure()
+                        ? INVALID_VALUE_MESSAGE
+                        : error.getDefaultMessage()))
                 .findFirst()
                 .or(() -> bindingResult.getGlobalErrors().stream()
                         .map(DefaultMessageSourceResolvable::getDefaultMessage)
@@ -52,6 +57,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(ErrorCode.INVALID_INPUT.getHttpStatus())
                 .body(ApiResponse.fail(message));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatchException(MethodArgumentTypeMismatchException e) {
+        log.warn("TypeMismatchException: parameter={}", e.getName());
+        return ResponseEntity
+                .status(ErrorCode.INVALID_INPUT.getHttpStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_INPUT.getMessage()));
     }
 
     @ExceptionHandler(AuthenticationException.class)
