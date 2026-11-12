@@ -66,7 +66,7 @@ class ExpertFileRollbackTest {
         storage = spy(new ExpertFileStorage(root.toString()));
         pdfValidator = mock(PdfSecurityValidator.class);
         service = new ExpertFileService(files, profiles, certificates, businesses,
-                mock(GoogleVisionOcrClient.class), new FileVerificationUtil(), pdfValidator, storage);
+                mock(GoogleVisionOcrClient.class), new FileVerificationUtil(), pdfValidator, storage, mock(ExpertOcrPersistenceService.class));
         when(profiles.findByUserId(10L)).thenReturn(Optional.of(ExpertProfile.builder().id(1L).build()));
         var dataSource = new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID(), "sa", "");
         jdbc = new JdbcTemplate(dataSource);
@@ -269,7 +269,8 @@ class ExpertFileRollbackTest {
 
     @Test
     void apiEnvelopeAndUploadFieldsRemainCompatible() {
-        var response = transaction.execute(status -> new ExpertFileController(service)
+        var response = transaction.execute(status -> new ExpertFileController(service,
+                org.mockito.Mockito.mock(BusinessRegistrationInfoService.class))
                 .uploadFile(new CustomUserDetails(10L, "EXPERT"),
                         new MockMultipartFile("file", "sample.png", "image/png", png), "CERTIFICATE"));
         var json = new ObjectMapper().findAndRegisterModules()

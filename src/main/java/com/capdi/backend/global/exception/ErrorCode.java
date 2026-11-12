@@ -7,6 +7,15 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    NTS_CONFIRMATION_REQUIRED(HttpStatus.CONFLICT, "현재 자료의 사용자 확인이 필요합니다."),
+    NTS_ALREADY_RUNNING(HttpStatus.CONFLICT, "동일한 자료의 검증이 진행 중입니다."),
+    NTS_RESULT_STORAGE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "검증 결과 저장을 확인할 수 없습니다. 결과를 다시 조회해주세요."),
+    NTS_FILE_UNAVAILABLE(HttpStatus.CONFLICT, "검증 대상 파일을 확인할 수 없습니다."),
+    OCR_ALREADY_RUNNING(HttpStatus.CONFLICT, "OCR 처리가 진행 중입니다."),
+    OCR_RESULT_STALE(HttpStatus.CONFLICT, "최신 OCR 실행과 일치하지 않는 결과입니다."),
+    OCR_EMPTY(HttpStatus.UNPROCESSABLE_ENTITY, "문서에서 텍스트를 찾지 못했습니다."),
+    OCR_FAILED(HttpStatus.BAD_GATEWAY, "OCR 처리에 실패했습니다."),
+    OCR_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "OCR 처리 시간이 초과되었습니다."),
     FILE_STORAGE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장에 실패했습니다."),
 
     // 공통
