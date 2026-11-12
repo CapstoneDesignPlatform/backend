@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -73,13 +75,22 @@ public class ClientService {
         ClientInfo clientInfo = clientRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CLIENT_INFO_NOT_FOUND));
 
+        // 입찰과 같은 순서(공고 잠금 → 입찰 조회)로 잠가 동시 입찰과 경합하지 않게 한다.
+        List<Announcement> activeAnnouncements = announcementRepository
+                .findAllByClientInfoAndStatusWithLock(clientInfo, AnnouncementStatusEnum.ACTIVE);
+
+        boolean complete = ClientInfo.hasRequiredCompanyInfo(
+                request.getCompanyName(), request.getBusinessNumber(), request.getAddress());
+        if (!complete && bidRepository.countInProgressBidsByClientInfoIdWithLock(clientInfo.getId()) > 0) {
+            throw new CustomException(ErrorCode.CLIENT_INFO_REQUIRED_AFTER_BID);
+        }
+
         applyClientInfoUpdate(clientInfo, request);
 
-        if (clientInfo.isComplete()) {
-            announcementRepository.findAllForProgressUpdateWithLock(
-                            clientInfo, AnnouncementStatusEnum.ACTIVE, AnnouncementProgressStepEnum.STEP_1_REGISTERED)
-                    .forEach(announcement -> announcement.updateProgressStep(AnnouncementProgressStepEnum.STEP_2_BID_CLOSED));
-        }
+        AnnouncementProgressStepEnum targetStep = progressStepFor(complete);
+        activeAnnouncements.stream()
+                .filter(announcement -> isBeforeClosing(announcement.getProgressStep()))
+                .forEach(announcement -> announcement.updateProgressStep(targetStep));
 
         return ClientInfoResponse.from(clientInfo);
     }
@@ -94,8 +105,7 @@ public class ClientService {
         }
 
         if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE
-                || (announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_1_REGISTERED
-                    && announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_2_BID_CLOSED)) {
+                || !isBeforeClosing(announcement.getProgressStep())) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_EDITABLE);
         }
 
@@ -111,12 +121,21 @@ public class ClientService {
 
         ClientInfo clientInfo = announcement.getClientInfo();
         applyClientInfoUpdate(clientInfo, request);
-        announcement.updateProgressStep(complete
-                ? AnnouncementProgressStepEnum.STEP_2_BID_CLOSED
-                : AnnouncementProgressStepEnum.STEP_1_REGISTERED);
+        announcement.updateProgressStep(progressStepFor(complete));
 
         clientRepository.flush();
         return ClientInfoResponse.from(clientInfo);
+    }
+
+    private static boolean isBeforeClosing(AnnouncementProgressStepEnum step) {
+        return step == AnnouncementProgressStepEnum.STEP_1_REGISTERED
+                || step == AnnouncementProgressStepEnum.STEP_2_BID_CLOSED;
+    }
+
+    private static AnnouncementProgressStepEnum progressStepFor(boolean companyInfoComplete) {
+        return companyInfoComplete
+                ? AnnouncementProgressStepEnum.STEP_2_BID_CLOSED
+                : AnnouncementProgressStepEnum.STEP_1_REGISTERED;
     }
 
     private void applyClientInfoUpdate(ClientInfo clientInfo, ClientInfoRequest request) {
