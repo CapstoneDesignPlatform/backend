@@ -7,6 +7,11 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    PAYMENT_IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "동일 멱등키의 요청 내용이 다릅니다."),
+    PAYMENT_NOT_ELIGIBLE(HttpStatus.CONFLICT, "결제 주문을 생성할 수 없는 선정 상태입니다."),
+    PAYMENT_INVALID_AMOUNT(HttpStatus.CONFLICT, "확정 금액은 양수인 원화 정수 금액이어야 합니다."),
+    PAYMENT_ORDER_CONFLICT(HttpStatus.CONFLICT, "기존 결제 주문과 요청 또는 거래 정보가 다릅니다."),
+    PAYMENT_ORDER_BUSY(HttpStatus.CONFLICT, "결제 주문 처리 중입니다. 기존 주문을 확인해주세요."),
     NTS_CONFIRMATION_REQUIRED(HttpStatus.CONFLICT, "현재 자료의 사용자 확인이 필요합니다."),
     NTS_ALREADY_RUNNING(HttpStatus.CONFLICT, "동일한 자료의 검증이 진행 중입니다."),
     NTS_RESULT_STORAGE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "검증 결과 저장을 확인할 수 없습니다. 결과를 다시 조회해주세요."),
