@@ -7,6 +7,7 @@ import com.capdi.backend.global.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -48,6 +49,7 @@ public class SecurityConfig {
                                 "/actuator/**",
                                 "/admin/login"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/experts", "/experts/*").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .requestMatchers("/expert/**").hasRole("EXPERT")
                         .requestMatchers("/files/**").hasRole("EXPERT")
