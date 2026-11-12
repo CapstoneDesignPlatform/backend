@@ -41,15 +41,16 @@ public class BidService {
 
     @Transactional
     public BidResponse createBid(Long loginUserId, String announcementCode, BidCreateRequest request) {
+        // Lock before snapshot reads so a waiting bid sees committed company-info edits.
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
         ExpertProfile expertProfile = expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.EXPERT_PROFILE_NOT_FOUND));
 
         if (expertProfile.getVerificationStatus() != VerificationStatusEnum.APPROVED) {
             throw new CustomException(ErrorCode.EXPERT_NOT_APPROVED);
         }
-
-        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
-                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
 
         if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_CLOSED);
@@ -118,6 +119,23 @@ public class BidService {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
         }
 
+        return selectLockedAnnouncement(announcement, bidId, request);
+    }
+
+    @Transactional
+    public ExpertSelectResponse selectGuestExpert(String announcementCode, Long bidId, ExpertSelectRequest request) {
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        if (!announcement.isGuest()) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
+        }
+
+        return selectLockedAnnouncement(announcement, bidId, request);
+    }
+
+    private ExpertSelectResponse selectLockedAnnouncement(
+            Announcement announcement, Long bidId, ExpertSelectRequest request) {
         if (announcement.getStatus() != AnnouncementStatusEnum.CLOSED
                 || announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_IN_SELECTION_STEP);

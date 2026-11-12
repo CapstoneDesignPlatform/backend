@@ -4,6 +4,9 @@ import com.capdi.backend.domain.announcement.entity.*;
 import com.capdi.backend.domain.announcement.validation.ValidBusinessOwnerTypeDependentFields;
 import com.capdi.backend.domain.announcement.validation.ValidPurposeDependentFields;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -26,8 +29,12 @@ public class AnnouncementCreateRequest {
     private BusinessOwnerTypeEnum businessOwnerType;
 
     @NotNull(message = "자본금은 필수입니다.")
+    @PositiveOrZero(message = "자본금은 0 이상이어야 합니다.")
+    @Digits(integer = 13, fraction = 2, message = "자본금은 정수 13자리, 소수 2자리까지 입력할 수 있습니다.")
     private BigDecimal capital;  // 자본금 (억원 단위, 항상 필수)
 
+    @PositiveOrZero(message = "자본규모는 0 이상이어야 합니다.")
+    @Digits(integer = 13, fraction = 2, message = "자본규모는 정수 13자리, 소수 2자리까지 입력할 수 있습니다.")
     private BigDecimal capitalScale;  // 자본규모 (억원 단위, 창업예정이면 null)
 
     //필요 면허 탭 전용 (purpose = REQUIRED_LICENSE)
@@ -37,6 +44,7 @@ public class AnnouncementCreateRequest {
     private String currentIndustryDetail;                   // 건설업관련/비건설업관련 선택 시 상세 내용
 
     //실태 조사 탭 전용 (purpose = STATUS_INVESTIGATION)
+    @Size(max = 100, message = "보유 면허는 100자까지 입력할 수 있습니다.")
     private String heldLicense;                      // 보유 면허
 
     //기타 탭 전용 (purpose = ETC)
