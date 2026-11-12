@@ -137,6 +137,7 @@ class ExpertFileStoragePathTest {
                 .withBean(GoogleVisionOcrClient.class, () -> mock(GoogleVisionOcrClient.class))
                 .withBean(FileVerificationUtil.class, () -> mock(FileVerificationUtil.class))
                 .withBean(PdfSecurityValidator.class, () -> mock(PdfSecurityValidator.class))
+                .withBean(ExpertOcrPersistenceService.class, () -> mock(ExpertOcrPersistenceService.class))
                 .withBean(ExpertFileStorage.class)
                 .withBean(ExpertFileService.class);
     }

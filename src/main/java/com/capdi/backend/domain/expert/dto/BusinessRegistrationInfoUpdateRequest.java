@@ -11,6 +11,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class BusinessRegistrationInfoUpdateRequest {
 
+    @JsonProperty("opening_date")
+    @com.fasterxml.jackson.annotation.JsonFormat(pattern = "uuuu-MM-dd", lenient = com.fasterxml.jackson.annotation.OptBoolean.FALSE)
+    private java.time.LocalDate openingDate;
+
     @NotNull(message = "파일 ID는 필수입니다.")
     @JsonProperty("file_id")
     private Long fileId;

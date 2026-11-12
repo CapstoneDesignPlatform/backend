@@ -11,6 +11,13 @@ file:
   storage:
     upload-dir: ${FILE_STORAGE_UPLOAD_DIR:${user.dir}/uploads/files}
 
+nts:
+  business:
+    enabled: ${NTS_BUSINESS_ENABLED:false}
+    api-key: ${NTS_BUSINESS_API_KEY:}
+    connect-timeout: ${NTS_BUSINESS_CONNECT_TIMEOUT:2s}
+    response-timeout: ${NTS_BUSINESS_RESPONSE_TIMEOUT:8s}
+
 server:
   servlet:
     context-path: /api
