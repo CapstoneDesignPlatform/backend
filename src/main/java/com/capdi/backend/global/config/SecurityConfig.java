@@ -52,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers("/expert/**").hasRole("EXPERT")
                         .requestMatchers("/files/**").hasRole("EXPERT")
                         .requestMatchers("/users/**").authenticated()
+                        .requestMatchers("/payments/**", "/announcements/*/payments").hasRole("CLIENT")
                         .anyRequest().permitAll()
                 )
                 .exceptionHandling(ex -> ex

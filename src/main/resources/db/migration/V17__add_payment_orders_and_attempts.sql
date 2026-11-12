@@ -1,0 +1,56 @@
+CREATE TABLE payments (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(40) NOT NULL,
+    bid_id BIGINT NOT NULL,
+    announcement_id BIGINT NOT NULL,
+    announcement_code VARCHAR(50) NOT NULL,
+    client_user_id BIGINT NOT NULL,
+    expert_profile_id BIGINT NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    method VARCHAR(30) NOT NULL,
+    fee_policy_version VARCHAR(50) NOT NULL,
+    platform_fee_rate DECIMAL(5,4) NOT NULL,
+    expert_share_rate DECIMAL(5,4) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    CONSTRAINT uk_payments_bid UNIQUE (bid_id),
+    CONSTRAINT uk_payments_order UNIQUE (order_id),
+    CONSTRAINT fk_payments_bid FOREIGN KEY (bid_id) REFERENCES bids(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_payments_announcement FOREIGN KEY (announcement_id) REFERENCES announcement(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_payments_client FOREIGN KEY (client_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_payments_expert FOREIGN KEY (expert_profile_id) REFERENCES expert_profiles(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_payments_amount CHECK (amount > 0 AND amount = FLOOR(amount)),
+    CONSTRAINT ck_payments_currency CHECK (currency = 'KRW'),
+    CONSTRAINT ck_payments_rates CHECK (platform_fee_rate >= 0 AND expert_share_rate >= 0
+        AND platform_fee_rate <= 1 AND expert_share_rate <= 1 AND platform_fee_rate + expert_share_rate = 1)
+);
+CREATE TABLE payment_attempts (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    payment_id BIGINT NOT NULL,
+    attempt_key VARCHAR(36) NOT NULL,
+    attempt_number INT NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    provider VARCHAR(30) NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    CONSTRAINT uk_payment_attempt_key UNIQUE (attempt_key),
+    CONSTRAINT uk_payment_attempt_number UNIQUE (payment_id, attempt_number),
+    CONSTRAINT fk_payment_attempt_order FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_payment_attempt_number CHECK (attempt_number > 0)
+);
+CREATE TABLE payment_idempotency_keys (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    client_user_id BIGINT NOT NULL,
+    key_hash VARCHAR(64) NOT NULL,
+    request_hash VARCHAR(64) NOT NULL,
+    payment_id BIGINT NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    CONSTRAINT uk_payment_idempotency_client_key UNIQUE (client_user_id, key_hash),
+    CONSTRAINT fk_payment_idempotency_client FOREIGN KEY (client_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_payment_idempotency_order FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE RESTRICT
+);
