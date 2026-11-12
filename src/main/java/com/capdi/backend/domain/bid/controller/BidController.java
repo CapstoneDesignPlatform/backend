@@ -9,6 +9,7 @@ import com.capdi.backend.domain.bid.service.BidService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
 import com.capdi.backend.global.response.PageResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -52,6 +53,16 @@ public class BidController {
     ) {
         ExpertSelectResponse response = bidService.selectExpert(
                 userDetails.getUserId(), announcementCode, bidId, request);
+        return ResponseEntity.ok(ApiResponse.ok("전문가가 선택되었습니다.", response));
+    }
+
+    @PatchMapping("/announcements/guest/{announcementCode}/bids/{bidId}/select")
+    @Operation(summary = "비회원 전문가 최종 선정", description = "마감된 비회원 공고에서 전문가를 선정하고 최종 금액을 확정합니다.")
+    public ResponseEntity<ApiResponse<ExpertSelectResponse>> selectGuestExpert(
+            @PathVariable String announcementCode,
+            @PathVariable Long bidId,
+            @RequestBody @Valid ExpertSelectRequest request) {
+        ExpertSelectResponse response = bidService.selectGuestExpert(announcementCode, bidId, request);
         return ResponseEntity.ok(ApiResponse.ok("전문가가 선택되었습니다.", response));
     }
 

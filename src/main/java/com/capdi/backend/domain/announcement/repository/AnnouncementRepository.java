@@ -24,6 +24,7 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     Optional<Announcement> findByAnnouncementCodeWithLock(@Param("code") String code);
 
     List<Announcement> findAllByClientInfo(ClientInfo clientInfo);
+    boolean existsByClientInfoAndIdNot(ClientInfo clientInfo, Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM Announcement a WHERE a.clientInfo = :clientInfo " +

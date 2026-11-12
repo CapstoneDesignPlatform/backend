@@ -173,6 +173,18 @@ public class AnnouncementService {
     }
 
     @Transactional
+    public void closeGuestAnnouncement(String announcementCode) {
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        if (!announcement.isGuest()) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
+        }
+
+        closeLockedAnnouncement(announcement);
+    }
+
+    @Transactional
     public void closeAnnouncementAsAdmin(String announcementCode) {
         Announcement announcement = announcementRepository
                 .findByAnnouncementCodeWithLock(announcementCode)
