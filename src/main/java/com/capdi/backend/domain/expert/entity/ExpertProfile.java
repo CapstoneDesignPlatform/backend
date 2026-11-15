@@ -28,6 +28,11 @@ public class ExpertProfile extends BaseTimeEntity {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "membership_grade", nullable = false, length = 20)
+    @Builder.Default
+    private MembershipGradeEnum membershipGrade = MembershipGradeEnum.BUSINESS;
+
     @Column(nullable = false, length = 100)
     private String specialty;
 
