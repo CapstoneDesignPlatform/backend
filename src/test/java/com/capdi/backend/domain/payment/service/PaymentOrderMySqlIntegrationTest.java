@@ -284,9 +284,9 @@ class PaymentOrderMySqlIntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
     @Test void fullFlywayAndHibernateSchemaValidate() {
-        assertThat(flyway.info().applied()).hasSize(17);
+        assertThat(flyway.info().applied()).hasSize(24);
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,17).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,24).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(entityManager.getEntityManagerFactory().getMetamodel().getEntities())
                 .extracting(t->t.getJavaType().getName()).contains(Payment.class.getName(),PaymentAttempt.class.getName(),PaymentIdempotencyKey.class.getName());

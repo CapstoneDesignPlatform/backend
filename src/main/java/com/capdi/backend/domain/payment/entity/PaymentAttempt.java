@@ -41,6 +41,59 @@ public class PaymentAttempt extends BaseTimeEntity {
         attempt.attemptNumber = number;
         attempt.status = PaymentAttemptStatus.PREPARED;
         attempt.provider = PaymentProvider.DISABLED;
+        attempt.method=payment.getMethod();attempt.chargeAmount=payment.getAmount();
+        attempt.currency=payment.getCurrency();attempt.orderId=payment.getOrderId();
         return attempt;
+    }
+
+    @Column(name="method",nullable=false,length=30) @Enumerated(EnumType.STRING) private PaymentMethod method;
+    @Column(name="charge_amount",nullable=false,precision=15,scale=2) private java.math.BigDecimal chargeAmount;
+    @Column(name="currency",nullable=false,length=3) private String currency;
+    @Column(name="order_id",nullable=false,length=40) private String orderId;
+    @Column(name="request_key_hash",length=64,updatable=false) private String requestKeyHash;
+    @Column(name="confirmation_hash",length=64) private String confirmationHash;
+    @Column(name="provider_code",nullable=false,length=40) private String providerCode="DISABLED";
+    @Column(name="merchant_id",length=100) private String merchantId;
+    @Enumerated(EnumType.STRING) @Column(nullable=false,length=20) private PaymentEnvironment environment=PaymentEnvironment.DISABLED;
+    @Column(name="provider_transaction_id",length=200) private String providerTransactionId;
+    @Column(name="provider_raw_status",length=80) private String providerRawStatus;
+    @Enumerated(EnumType.STRING) @Column(nullable=false,length=40) private PaymentProcessingFailure failure=PaymentProcessingFailure.NONE;
+    @Column(name="execution_token",length=36) private String executionToken;
+    @Column(name="lease_until") private java.time.Instant leaseUntil;
+
+    public static PaymentAttempt start(Payment p,int number,String key,
+            com.capdi.backend.domain.payment.gateway.PaymentGateway.Identity identity,java.time.Instant now) {
+        var a=prepare(p,number);a.requestKeyHash=key;a.provider=PaymentProvider.ADAPTER;
+        a.providerCode=identity.code();a.merchantId=identity.merchant();a.environment=identity.environment();a.claim(now);return a;
+    }
+    public String claim(java.time.Instant now) {
+        if(busy(now))throw new IllegalStateException("Payment execution already leased");
+        executionToken=UUID.randomUUID().toString();leaseUntil=now.plusSeconds(30);return executionToken;
+    }
+    public boolean busy(java.time.Instant now) {return executionToken!=null && leaseUntil!=null && leaseUntil.isAfter(now);}
+    public boolean tokenMatches(String token) {return token!=null && token.equals(executionToken);}
+    public void confirming(String hash) {confirmationHash=hash;status=PaymentAttemptStatus.REQUESTED;}
+    public void observed(com.capdi.backend.domain.payment.gateway.PaymentGateway.Observation result) {
+        if(result.transactionId()!=null)providerTransactionId=result.transactionId();
+        providerRawStatus=result.rawStatus();failure=PaymentProcessingFailure.NONE;
+        status=switch(result.state()) {
+            case PREPARED -> PaymentAttemptStatus.PREPARED;
+            case REQUESTED -> PaymentAttemptStatus.REQUESTED;
+            case WAITING_DEPOSIT -> PaymentAttemptStatus.WAITING_DEPOSIT;
+            case PAID -> PaymentAttemptStatus.SUCCEEDED;
+            case FAILED -> PaymentAttemptStatus.FAILED;
+            case CANCELED -> PaymentAttemptStatus.CANCELED;
+            case UNKNOWN -> PaymentAttemptStatus.UNKNOWN;
+        };
+        executionToken=null;leaseUntil=null;
+    }
+    public void hold(PaymentProcessingFailure reason) {failure=reason;executionToken=null;leaseUntil=null;}
+    public void uncertain(PaymentProcessingFailure reason) {
+        status=PaymentAttemptStatus.UNKNOWN;failure=reason;executionToken=null;leaseUntil=null;
+    }
+    public com.capdi.backend.domain.payment.gateway.PaymentGateway.Reference reference() {
+        return new com.capdi.backend.domain.payment.gateway.PaymentGateway.Reference(
+                new com.capdi.backend.domain.payment.gateway.PaymentGateway.Identity(providerCode,merchantId,environment),
+                orderId,attemptKey,providerTransactionId,chargeAmount,currency,method);
     }
 }

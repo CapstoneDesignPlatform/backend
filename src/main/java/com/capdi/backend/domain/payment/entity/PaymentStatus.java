@@ -1,6 +1,2 @@
 package com.capdi.backend.domain.payment.entity;
-
-/** Order creation is not payment authorization or settlement. */
-public enum PaymentStatus {
-    CREATED
-}
+public enum PaymentStatus { CREATED, PROCESSING, WAITING_DEPOSIT, PAID, FAILED, CANCELED, UNKNOWN }

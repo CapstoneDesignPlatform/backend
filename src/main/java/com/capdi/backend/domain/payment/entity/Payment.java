@@ -74,4 +74,21 @@ public class Payment extends BaseTimeEntity {
         payment.status = PaymentStatus.CREATED;
         return payment;
     }
+
+    @Column(name="active_attempt_id") private Long activeAttemptId;
+    @Column(name="paid_at") private java.time.Instant paidAt;
+    public void beginAttempt(Long attempt) {
+        if(status!=PaymentStatus.CREATED || activeAttemptId!=null)throw new IllegalStateException("Payment cannot start another attempt");
+        activeAttemptId=attempt;status=PaymentStatus.PROCESSING;
+    }
+    public boolean ownsAttempt(Long id) {return java.util.Objects.equals(activeAttemptId,id);}
+    public void recordAttempt(Long id,PaymentStatus next,java.time.Instant now) {
+        if(!ownsAttempt(id))throw new IllegalStateException("Stale payment attempt");
+        if(status==PaymentStatus.PAID) {
+            if(next!=PaymentStatus.PAID)throw new IllegalStateException("Paid payment requires separate reversal handling");
+            return;
+        }
+        status=next;
+        if(next==PaymentStatus.PAID && paidAt==null)paidAt=now;
+    }
 }

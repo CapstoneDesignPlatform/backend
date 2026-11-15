@@ -7,6 +7,13 @@ import org.springframework.http.HttpStatus;
 @Getter
 @RequiredArgsConstructor
 public enum ErrorCode {
+    PAYMENT_EXECUTION_STORAGE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "결제 결과 저장을 확인할 수 없습니다. 조회 및 대사가 필요합니다."),
+    PAYMENT_GATEWAY_DISABLED(HttpStatus.SERVICE_UNAVAILABLE, "결제 공급자 실행을 사용할 수 없습니다."),
+    PAYMENT_EXECUTION_CONFLICT(HttpStatus.CONFLICT, "현재 결제 시도를 실행할 수 없습니다."),
+    PAYMENT_EXECUTION_STALE(HttpStatus.CONFLICT, "오래된 결제 실행 결과입니다."),
+    PAYMENT_EVENT_INVALID(HttpStatus.BAD_REQUEST, "검증할 수 없는 결제 이벤트입니다."),
+    PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "결제 이벤트 식별 정보가 충돌합니다."),
+    PAYMENT_FINANCIAL_POLICY_UNCONFIRMED(HttpStatus.SERVICE_UNAVAILABLE, "Contract and tax policies require review."),
     PAYMENT_IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "동일 멱등키의 요청 내용이 다릅니다."),
     PAYMENT_NOT_ELIGIBLE(HttpStatus.CONFLICT, "결제 주문을 생성할 수 없는 선정 상태입니다."),
     PAYMENT_INVALID_AMOUNT(HttpStatus.CONFLICT, "확정 금액은 양수인 원화 정수 금액이어야 합니다."),
