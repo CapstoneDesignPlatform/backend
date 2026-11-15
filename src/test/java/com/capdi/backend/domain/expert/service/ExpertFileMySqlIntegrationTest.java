@@ -130,11 +130,11 @@ class ExpertFileMySqlIntegrationTest {
         assertThat(MYSQL.getContainerInfo().getHostConfig().getTmpFs()).containsKey("/var/lib/mysql");
         assertThat(MYSQL.getContainerInfo().getConfig().getLabels()).doesNotContainKey("com.docker.compose.project");
         assertThat(flyway.info().pending()).isEmpty();
-        assertThat(flyway.info().applied()).hasSize(16);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("16");
+        assertThat(flyway.info().applied()).hasSize(17);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("17");
         flyway.validate();
         System.out.println("ISOLATED_MYSQL container=" + MYSQL.getContainerId() + " url=" + MYSQL.getJdbcUrl()
-                + " transactionManager=" + manager.getClass().getSimpleName() + " migrations=16");
+                + " transactionManager=" + manager.getClass().getSimpleName() + " migrations=17");
     }
 
     @Test
@@ -1115,7 +1115,7 @@ class ExpertFileMySqlIntegrationTest {
             jdbc.update("INSERT INTO expert_business_registration_infos(id,expert_profile_id,file_id,business_number,representative_name,company_name,created_at,updated_at) VALUES(1,1,1,'1234567891','LegacyOwner','LegacyCompany',NOW(),NOW())");
             var latest = Flyway.configure().dataSource(legacy.getJdbcUrl(),legacy.getUsername(),legacy.getPassword()).load();
             latest.migrate(); latest.validate();
-            assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("16");
+            assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("17");
             var row = jdbc.queryForMap("SELECT business_number,opening_date FROM expert_business_registration_infos WHERE id=1");
             assertThat(row.get("business_number")).isEqualTo("1234567891");
             assertThat(row.get("opening_date")).isNull();
