@@ -145,6 +145,8 @@ public class AnnouncementDetailResponse {
         private String address;
         private String email;
         private String contact;
+        private String website;
+        private String description;
 
         @JsonProperty("founded_date")
         private LocalDate foundedDate;
@@ -159,6 +161,8 @@ public class AnnouncementDetailResponse {
                     .address(clientInfo.getAddress())
                     .email(clientInfo.getEmail())
                     .contact(clientInfo.getContact())
+                    .website(clientInfo.getWebsite())
+                    .description(clientInfo.getDescription())
                     .foundedDate(clientInfo.getFoundedDate())
                     .capital(clientInfo.getCapital())
                     .build();

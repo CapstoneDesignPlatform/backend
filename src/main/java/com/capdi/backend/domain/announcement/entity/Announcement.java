@@ -106,6 +106,10 @@ public class Announcement extends BaseTimeEntity {
         return this.user != null && this.user.getId().equals(userId);
     }
 
+    public boolean isGuest() {
+        return this.user == null && this.clientInfo.getUser() == null;
+    }
+
     public String getDisplayTitle() {
         return industry.getLabel() + " " + purpose.getLabel();
     }

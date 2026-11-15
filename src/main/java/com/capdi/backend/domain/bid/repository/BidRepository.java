@@ -40,6 +40,12 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
     @Query(value = "SELECT COUNT(*) FROM bids WHERE announcement_code = :code FOR UPDATE", nativeQuery = true)
     long countByAnnouncementCodeWithLock(@Param("code") String code);
 
+    /** 취소·완료되지 않은 공고에 달린 입찰 수. 잠금 읽기라 대기 중 커밋된 입찰도 보인다. */
+    @Query(value = "SELECT COUNT(*) FROM bids b JOIN announcement a ON a.announcement_code = b.announcement_code "
+            + "WHERE a.client_info_id = :clientInfoId AND a.status <> 'CANCELLED' "
+            + "AND a.progress_step <> 'STEP_7_COMPLETED' FOR SHARE", nativeQuery = true)
+    long countInProgressBidsByClientInfoIdWithLock(@Param("clientInfoId") Long clientInfoId);
+
     @Modifying
     @Query("UPDATE Bid b SET b.status = :rejected " +
            "WHERE b.announcement = :announcement AND b.id != :bidId AND b.status = :pending")

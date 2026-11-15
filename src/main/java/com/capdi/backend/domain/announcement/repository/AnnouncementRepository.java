@@ -24,14 +24,13 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     Optional<Announcement> findByAnnouncementCodeWithLock(@Param("code") String code);
 
     List<Announcement> findAllByClientInfo(ClientInfo clientInfo);
+    boolean existsByClientInfoAndIdNot(ClientInfo clientInfo, Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT a FROM Announcement a WHERE a.clientInfo = :clientInfo " +
-            "AND a.status = :status AND a.progressStep = :step")
-    List<Announcement> findAllForProgressUpdateWithLock(
+    @Query("SELECT a FROM Announcement a WHERE a.clientInfo = :clientInfo AND a.status = :status")
+    List<Announcement> findAllByClientInfoAndStatusWithLock(
             @Param("clientInfo") ClientInfo clientInfo,
-            @Param("status") AnnouncementStatusEnum status,
-            @Param("step") AnnouncementProgressStepEnum step);
+            @Param("status") AnnouncementStatusEnum status);
     Page<Announcement> findAllByStatus(AnnouncementStatusEnum status, Pageable pageable);
     List<Announcement> findAllByClientInfoOrderByCreatedAtDesc(ClientInfo clientInfo);
 }
