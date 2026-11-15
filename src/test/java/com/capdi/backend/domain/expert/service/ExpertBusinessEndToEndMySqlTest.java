@@ -579,7 +579,7 @@ class ExpertBusinessEndToEndMySqlTest {
         assertThat(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(download.getBody()))).isEqualTo(digest);
         assertThat(files.findById(f.file).orElseThrow().getVerificationStatus().name()).isEqualTo(oldApproval);
         assertThat(profiles.findByUserId(f.session.userId()).orElseThrow().getVerificationStatus().name()).isEqualTo(oldProfile);
-        flyway.validate();assertThat(flyway.info().applied()).hasSize(17);
+        flyway.validate();assertThat(flyway.info().applied()).hasSize(19);
     }
 
     @ParameterizedTest @ValueSource(strings={"01","02","03"})
