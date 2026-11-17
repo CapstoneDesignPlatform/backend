@@ -63,8 +63,8 @@ import static org.mockito.Mockito.*;
 class PaymentProcessingMySqlIntegrationTest {
     @TestConfiguration static class FakeConfig {
         @Bean @Primary FakePaymentGateway fakeGateway(){return new FakePaymentGateway();}
-        @Bean @Primary MutableClock syntheticClock(){return new MutableClock();}
     }
+    static MutableClock testPaymentClock(){return new MutableClock();}
     static class MutableClock extends Clock {
         final AtomicReference<Instant> now=new AtomicReference<>(Instant.parse("2026-01-01T00:00:00Z"));
         void reset(){now.set(Instant.parse("2026-01-01T00:00:00Z"));}
@@ -92,14 +92,14 @@ class PaymentProcessingMySqlIntegrationTest {
     @Autowired PaymentWebhookEventRepository events;@Autowired PaymentExecutionService execution;
     @Autowired PaymentExecutionPersistenceService persistence;@Autowired PaymentWebhookService webhooks;
     @Autowired PaymentReconciliationService recovery;@Autowired PlatformTransactionManager manager;
-    @Autowired EntityManager em;@Autowired JwtUtil jwt;@Autowired FakePaymentGateway fake;@Autowired MutableClock clock;
+    @Autowired EntityManager em;@Autowired JwtUtil jwt;@Autowired FakePaymentGateway fake;@org.springframework.test.context.bean.override.convention.TestBean(name="paymentClock",methodName="testPaymentClock",enforceOverride=true) Clock clock;
     @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping;
     @MockitoBean GoogleVisionOcrClient vision;@MockitoBean NtsHttpTransport nts;
     @LocalServerPort int port;
     record Fixture(long client,long expert,long payment) { }
     record Reply(int status,JsonNode data) { }
     @BeforeEach void setup() throws Exception {
-        fake.reset();clock.reset();
+        fake.reset();((MutableClock)clock).reset();
         try(var c=dataSource.getConnection()) {
             assertThat(c.getCatalog()).isEqualTo("capdi_issue57_processing_test");
             assertThat(c.getMetaData().getURL()).startsWith(MYSQL.getJdbcUrl());
@@ -313,13 +313,13 @@ class PaymentProcessingMySqlIntegrationTest {
         Fixture f=order(PaymentMethod.CARD);
         var run=persistence.prepare(f.client(),f.payment(),"interrupted",PaymentMethod.CARD);
         assertThat(jobs.findByAttemptId(run.attempt()).orElseThrow().getState()).isEqualTo(PaymentReconciliationJob.State.PENDING);
-        clock.advance(31);assertThat(recovery.runDue()).isGreaterThanOrEqualTo(1);
+        ((MutableClock)clock).advance(31);assertThat(recovery.runDue()).isGreaterThanOrEqualTo(1);
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(fake.prepares).hasValue(0);assertThat(fake.confirms).hasValue(0);assertThat(fake.fetches.get()).isGreaterThanOrEqualTo(1);
     }
-    @Test void allEntitiesValidateAgainstV24AndCoreIsStillProviderNeutral() {
+    @Test void allEntitiesValidateAgainstV26AndCoreIsStillProviderNeutral() {
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,24).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,26).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(em.getEntityManagerFactory().getMetamodel().getEntities()).extracting(t->t.getJavaType().getName())
                 .contains(PaymentWebhookEvent.class.getName(),PaymentReconciliationJob.class.getName());
@@ -358,7 +358,7 @@ class PaymentProcessingMySqlIntegrationTest {
         try {
             var old=pool.submit(()->prepare(f,"old-execution",PaymentMethod.CARD));assertThat(entered.await(10,TimeUnit.SECONDS)).isTrue();
             long a=attempts.findFirstByPaymentIdOrderByAttemptNumberDesc(f.payment()).orElseThrow().getId();
-            clock.advance(31);
+            ((MutableClock)clock).advance(31);
             assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
             release.countDown();assertThat(old.get(15,TimeUnit.SECONDS).status()).isEqualTo(409);
             assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
@@ -392,7 +392,7 @@ class PaymentProcessingMySqlIntegrationTest {
         var original=persistence.prepare(f.client(),f.payment(),"osiv",PaymentMethod.CARD);
         new TransactionTemplate(manager).execute(tx->{
             Payment oldPayment=em.find(Payment.class,f.payment());PaymentAttempt oldAttempt=em.find(PaymentAttempt.class,original.attempt());
-            assertThat(oldAttempt.getExecutionToken()).isEqualTo(original.token());clock.advance(31);
+            assertThat(oldAttempt.getExecutionToken()).isEqualTo(original.token());((MutableClock)clock).advance(31);
             fake.publish(original.reference(),PaymentGateway.State.PAID);
             var paid=execution.reconcile(f.client(),f.payment(),original.attempt());
             assertThat(paid.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
@@ -416,7 +416,7 @@ class PaymentProcessingMySqlIntegrationTest {
     @Test void missingCallbackAndWebhookAreRecoveredFromPreparedJobByLookupOnly() throws Exception {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
         assertThat(jobs.findByAttemptId(a).orElseThrow().getState()).isEqualTo(PaymentReconciliationJob.State.PENDING);
-        fake.publish(ref(a),PaymentGateway.State.PAID);clock.advance(31);
+        fake.publish(ref(a),PaymentGateway.State.PAID);((MutableClock)clock).advance(31);
         recovery.runDue();
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(fake.confirms).hasValue(0);

@@ -77,8 +77,8 @@ class FinancialWorkflowMySqlIntegrationTest {
         }
         @Bean @Primary FinancialVault syntheticVault(){return new FinancialVault("test",Map.of("test",new byte[32]));}
 
-        @Bean @Primary MutableClock syntheticClock(){return new MutableClock();}
     }
+    static MutableClock testPaymentClock(){return new MutableClock();}
     static class MutableClock extends Clock {
         final AtomicReference<Instant> now=new AtomicReference<>(Instant.parse("2026-01-01T00:00:00Z"));
         void reset(){now.set(Instant.parse("2026-01-01T00:00:00Z"));}
@@ -106,14 +106,14 @@ class FinancialWorkflowMySqlIntegrationTest {
     @Autowired PaymentWebhookEventRepository events;@Autowired PaymentExecutionService execution;
     @Autowired PaymentExecutionPersistenceService persistence;@Autowired PaymentWebhookService webhooks;
     @Autowired PaymentReconciliationService recovery;@Autowired PlatformTransactionManager manager;
-    @Autowired EntityManager em;@Autowired JwtUtil jwt;@Autowired FakePaymentGateway fake;@Autowired MutableClock clock;
+    @Autowired EntityManager em;@Autowired JwtUtil jwt;@Autowired FakePaymentGateway fake;@org.springframework.test.context.bean.override.convention.TestBean(name="paymentClock",methodName="testPaymentClock",enforceOverride=true) Clock clock;
     @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping;
     @MockitoBean GoogleVisionOcrClient vision;@MockitoBean NtsHttpTransport nts;
     @LocalServerPort int port;
     record Fixture(long client,long expert,long payment) { }
     record Reply(int status,JsonNode data) { }
     @BeforeEach void setup() throws Exception {
-        fake.reset();finance.reset();fakePayout.reset();fakeTax.reset();taxAuthorized.set(false);reset(financeOperations);clock.reset();
+        fake.reset();finance.reset();fakePayout.reset();fakeTax.reset();taxAuthorized.set(false);reset(financeOperations);((MutableClock)clock).reset();
         try(var c=dataSource.getConnection()) {
             assertThat(c.getCatalog()).isEqualTo("capdi_issue57_financial_test");
             assertThat(c.getMetaData().getURL()).startsWith(MYSQL.getJdbcUrl());
@@ -361,7 +361,7 @@ class FinancialWorkflowMySqlIntegrationTest {
   finance.submitFunction=c->{throw new FinancialGatewayException(FinancialGatewayException.Failure.TIMEOUT);};execute(r.admin(),op);
   var first=persistenceFinance.claimWorker(op);var second=persistenceFinance.claimWorker(op);
   assertThat(first.execute()).isTrue();assertThat(second.execute()).isFalse();
-  clock.advance(46);var recovered=persistenceFinance.claimWorker(op);assertThat(recovered.execute()).isTrue();
+  ((MutableClock)clock).advance(46);var recovered=persistenceFinance.claimWorker(op);assertThat(recovered.execute()).isTrue();
   assertThatThrownBy(()->persistenceFinance.complete(first,finance.evidence(first.command(),FinancialGateway.State.SUCCEEDED))).isInstanceOf(CustomException.class);
   persistenceFinance.complete(recovered,finance.evidence(recovered.command(),FinancialGateway.State.SUCCEEDED));
   assertThat(finance.submits).hasValue(1);journalBalanced(r);
@@ -370,7 +370,7 @@ class FinancialWorkflowMySqlIntegrationTest {
   var r=financialFixture();long op=refund(r,100,"worker");
   finance.submitFunction=c->{throw new FinancialGatewayException(FinancialGatewayException.Failure.TIMEOUT);};execute(r.admin(),op);
   finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.PENDING);
-  for(int i=0;i<8;i++){clock.advance(4000);workflow.runDue();}
+  for(int i=0;i<8;i++){((MutableClock)clock).advance(4000);workflow.runDue();}
   assertThat(financeOperations.findById(op).orElseThrow().getState()).isEqualTo(FinancialOperation.State.BLOCKED);
   assertThat(financeOperations.findById(op).orElseThrow().getLookupCount()).isEqualTo(8);assertThat(finance.submits).hasValue(1);
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operation_audits WHERE operation_id=?",Long.class,op)).isGreaterThan(8);
@@ -473,7 +473,7 @@ class FinancialWorkflowMySqlIntegrationTest {
   var r=financialFixture();long approval=payoutApproval(r,300),op=payout(r,approval,"exhausted-payout");
   finance.submitFunction=c->{throw new FinancialGatewayException(FinancialGatewayException.Failure.TIMEOUT);};execute(r.admin(),op);
   finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.PENDING);
-  for(int i=0;i<8;i++){clock.advance(4000);workflow.runDue();}
+  for(int i=0;i<8;i++){((MutableClock)clock).advance(4000);workflow.runDue();}
   assertThat(financeOperations.findById(op).orElseThrow().getState()).isEqualTo(FinancialOperation.State.BLOCKED);
   assertThat(send(r.fixture().expert(),UserTypeEnum.EXPERT,HttpMethod.POST,"/expert/me/settlement-accounts",
     Map.of("bank","KOOKMIN","number","000000123456","holder","Synthetic Person","contactName","Synthetic Person","contactEmail","synthetic@example.test","contactPhone","01000000000"),null).status()).isEqualTo(409);
@@ -485,7 +485,7 @@ class FinancialWorkflowMySqlIntegrationTest {
   var r=financialFixture();long op=refund(r,100,"exhausted-refund");
   finance.submitFunction=c->{throw new FinancialGatewayException(FinancialGatewayException.Failure.TIMEOUT);};execute(r.admin(),op);
   finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.PENDING);
-  for(int i=0;i<8;i++){clock.advance(4000);workflow.runDue();}
+  for(int i=0;i<8;i++){((MutableClock)clock).advance(4000);workflow.runDue();}
   long next=id(send(r.fixture().client(),UserTypeEnum.CLIENT,HttpMethod.POST,"/payments/"+r.fixture().payment()+"/refunds",Map.of("amount",100),"new-request"));
   long approval=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/refunds/"+next+"/decisions",
     Map.of("decision","APPROVED","expected_refund_version",0,"reason_code","REVIEWED"),null));
@@ -709,7 +709,7 @@ class FinancialWorkflowMySqlIntegrationTest {
  }
  @Test void processDeathAfterIssuanceRequestIsRecoveredWithoutReissue() throws Exception {
   var f=taxFlow();long execution=id(taxPrepare(f,"crash"));var run=taxPersistence.claimAdmin(f.ready().admin(),execution,false);
-  fakeTax.request(run.request());clock.advance(46);assertThat(taxExecution.runDue()).isGreaterThanOrEqualTo(1);
+  fakeTax.request(run.request());((MutableClock)clock).advance(46);assertThat(taxExecution.runDue()).isGreaterThanOrEqualTo(1);
   var restored=send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/tax-document-executions/"+execution,null,null);
   assertThat(restored.data().path("state").asText()).isEqualTo("ISSUED");assertThat(fakeTax.requests).hasValue(1);
  }
@@ -743,7 +743,7 @@ class FinancialWorkflowMySqlIntegrationTest {
  @Test void recoveryWorkersOnlyLookupAndAppendOneClaimPerPayout() throws Exception {
   var r=financialFixture();long payout=reservedInternal(r,"worker-payout");fakePayout.next=PayoutProvider.State.UNKNOWN;
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null).status()).isEqualTo(200);
-  fakePayout.next=PayoutProvider.State.SUCCEEDED;clock.advance(31);var pool=Executors.newFixedThreadPool(2);
+  fakePayout.next=PayoutProvider.State.SUCCEEDED;((MutableClock)clock).advance(31);var pool=Executors.newFixedThreadPool(2);
   try{var a=pool.submit(()->internalPayouts.runDue());var b=pool.submit(()->internalPayouts.runDue());a.get();b.get();}finally{pool.shutdownNow();}
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_audit_events WHERE payout_id=? AND code='LOOKUP_CLAIM'",Integer.class,payout)).isEqualTo(1);
   assertThat(fakePayout.requests).hasValue(1);assertThat(balance(r).path("paid").decimalValue()).isEqualByComparingTo("900");journalBalanced(r);
@@ -769,5 +769,22 @@ class FinancialWorkflowMySqlIntegrationTest {
   assertThat(send(r.fixture().expert(),UserTypeEnum.EXPERT,HttpMethod.POST,"/admin/tax-document-executions/"+execution+"/executions",null,null).status()).isEqualTo(403);
   assertThat(send(r.fixture().client(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/tax-document-executions/"+execution+"/events",null,null).status()).isEqualTo(403);
   assertThat(fakeTax.requests).hasValue(0);
+ }
+
+ @Test void membershipPlansAndDiagnosisSettlementRemainIndependentInMySql() throws Exception {
+  var r=financialFixture();
+  assertThat(jdbc.queryForObject("SELECT membership_grade FROM expert_profiles WHERE user_id=?",String.class,r.fixture().expert())).isEqualTo("BUSINESS");
+  String verification=jdbc.queryForObject("SELECT verification_status FROM expert_profiles WHERE user_id=?",String.class,r.fixture().expert());
+  jdbc.update("INSERT INTO subscription_plans(grade,plan_version,amount,currency,period_months,is_active,created_at) VALUES('PREMIUM',1,24000,'KRW',1,TRUE,NOW())");
+  jdbc.update("UPDATE expert_profiles SET membership_grade='PREMIUM' WHERE user_id=?",r.fixture().expert());
+  var plans=send(r.fixture().expert(),UserTypeEnum.EXPERT,HttpMethod.GET,"/subscription-plans",null,null);
+  assertThat(plans.status()).isEqualTo(200);assertThat(plans.data().isArray()).isTrue();
+  assertThat(plans.data()).anySatisfy(plan->assertThat(plan.path("amount").decimalValue()).isEqualByComparingTo("24000"));
+  assertThat(jdbc.queryForObject("SELECT amount FROM payments WHERE id=?",BigDecimal.class,r.fixture().payment())).isEqualByComparingTo("1000");
+  assertThat(balance(r).path("platform").decimalValue()).isEqualByComparingTo("100");assertThat(balance(r).path("expert").decimalValue()).isEqualByComparingTo("900");
+  assertThat(jdbc.queryForObject("SELECT verification_status FROM expert_profiles WHERE user_id=?",String.class,r.fixture().expert())).isEqualTo(verification);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM subscription_payments WHERE expert_user_id=?",Integer.class,r.fixture().expert())).isZero();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_attempts WHERE payment_id=?",Integer.class,r.fixture().payment())).isEqualTo(1);
+  journalBalanced(r);assertThat(finance.submits).hasValue(0);
  }
 }

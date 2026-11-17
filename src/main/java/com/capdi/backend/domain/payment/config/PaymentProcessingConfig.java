@@ -8,7 +8,7 @@ import java.time.Clock;
 
 @Configuration
 public class PaymentProcessingConfig {
-    @Bean @ConditionalOnMissingBean(Clock.class)
+    @Bean(name="paymentClock") @Primary @ConditionalOnMissingBean(name="paymentClock")
     Clock paymentClock() { return Clock.systemUTC(); }
     @Bean @ConditionalOnMissingBean(PaymentGateway.class)
     PaymentGateway paymentGateway(org.springframework.core.env.Environment env,Clock clock,

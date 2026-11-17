@@ -18,6 +18,9 @@ nts:
     connect-timeout: ${NTS_BUSINESS_CONNECT_TIMEOUT:2s}
     response-timeout: ${NTS_BUSINESS_RESPONSE_TIMEOUT:8s}
 
+subscription:
+  billing-key-encryption-key: ${SUBSCRIPTION_BILLING_KEY_ENCRYPTION_KEY:}
+
 server:
   servlet:
     context-path: /api

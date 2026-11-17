@@ -63,13 +63,13 @@ import static org.mockito.Mockito.*;
 class PortOnePaymentMySqlIntegrationTest {
     @TestConfiguration static class PortOneConfig {
         @Bean @Primary PortOneStub portOneStub(){return new PortOneStub();}
-        @Bean @Primary PaymentGateway portOneGateway(PortOneStub stub,MutableClock clock) {
+        @Bean @Primary PaymentGateway portOneGateway(PortOneStub stub,@org.springframework.beans.factory.annotation.Qualifier("paymentClock") Clock clock) {
             var settings=new com.capdi.backend.domain.payment.gateway.portone.PortOneSettings(true,true,"SANDBOX",
                     "merchant-test","store-test","channel-test","SYNTHETIC_API_SECRET",WEBHOOK_SECRET,Duration.ofSeconds(3));
             return new com.capdi.backend.domain.payment.gateway.portone.PortOneV2Gateway(settings,stub,new ObjectMapper(),clock);
         }
-        @Bean @Primary MutableClock syntheticClock(){return new MutableClock();}
     }
+    static MutableClock testPaymentClock(){return new MutableClock();}
     static class MutableClock extends Clock {
         final AtomicReference<Instant> now=new AtomicReference<>(Instant.parse("2026-01-01T00:00:00Z"));
         void reset(){now.set(Instant.parse("2026-01-01T00:00:00Z"));}
@@ -97,14 +97,14 @@ class PortOnePaymentMySqlIntegrationTest {
     @Autowired PaymentWebhookEventRepository events;@Autowired PaymentExecutionService execution;
     @Autowired PaymentExecutionPersistenceService persistence;@Autowired PaymentWebhookService webhooks;
     @Autowired PaymentReconciliationService recovery;@Autowired PlatformTransactionManager manager;
-    @Autowired EntityManager em;@Autowired JwtUtil jwt;@Autowired MutableClock clock;
+    @Autowired EntityManager em;@Autowired JwtUtil jwt;@org.springframework.test.context.bean.override.convention.TestBean(name="paymentClock",methodName="testPaymentClock",enforceOverride=true) Clock clock;
     @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping;
     @MockitoBean GoogleVisionOcrClient vision;@MockitoBean NtsHttpTransport nts;
     @LocalServerPort int port;
     record Fixture(long client,long expert,long payment) { }
     record Reply(int status,JsonNode data) { }
     @BeforeEach void setup() throws Exception {
-        stub.reset();clock.reset();
+        stub.reset();((MutableClock)clock).reset();
         try(var c=dataSource.getConnection()) {
             assertThat(c.getCatalog()).isEqualTo("capdi_issue57_portone_test");
             assertThat(c.getMetaData().getURL()).startsWith(MYSQL.getJdbcUrl());
