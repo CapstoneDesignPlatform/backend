@@ -10,7 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(assignableTypes = PaymentController.class)
+@RestControllerAdvice(assignableTypes = {PaymentController.class, PaymentAttemptController.class, PaymentCheckoutController.class, PaymentFinancialReviewController.class, FinancialExecutionController.class, ExpertFinancialController.class, OperationalRefundController.class, InternalSettlementController.class, InternalPayoutController.class, InternalTaxController.class, FinancialCompletionController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class PaymentExceptionHandler {
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
