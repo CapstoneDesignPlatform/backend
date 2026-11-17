@@ -4,7 +4,11 @@ import com.capdi.backend.domain.announcement.dto.AnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.dto.AnnouncementCreateResponse;
 import com.capdi.backend.domain.announcement.dto.AnnouncementDetailResponse;
 import com.capdi.backend.domain.announcement.dto.ClientAnnouncementListResponse;
+import com.capdi.backend.domain.announcement.dto.GuestAnnouncementCreateRequest;
 import com.capdi.backend.domain.announcement.service.AnnouncementService;
+import com.capdi.backend.domain.client.dto.ClientInfoRequest;
+import com.capdi.backend.domain.client.dto.ClientInfoResponse;
+import com.capdi.backend.domain.client.service.ClientService;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,10 +28,11 @@ import org.springframework.web.bind.annotation.*;
 public class AnnouncementController {
 
     private final AnnouncementService announcementService;
+    private final ClientService clientService;
 
     @PostMapping
     @PreAuthorize("hasRole('CLIENT')")
-    @Operation(summary = "회원 공고 등록")
+    @Operation(summary = "회원 공고 등록", description = "로그인한 회원의 기업 정보를 사용합니다. 기업 정보가 없으면 먼저 등록해야 합니다.")
     public ResponseEntity<ApiResponse<AnnouncementCreateResponse>> createAnnouncement(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestBody @Valid AnnouncementCreateRequest request) {
@@ -40,9 +45,9 @@ public class AnnouncementController {
     }
 
     @PostMapping("/guest")
-    @Operation(summary = "비회원 공고 등록")
+    @Operation(summary = "비회원 공고 등록", description = "기업 정보(clientInfo)와 공고 정보(announcement)를 함께 저장합니다.")
     public ResponseEntity<ApiResponse<AnnouncementCreateResponse>> createGuestAnnouncement(
-            @RequestBody @Valid AnnouncementCreateRequest request) {
+            @RequestBody @Valid GuestAnnouncementCreateRequest request) {
 
         AnnouncementCreateResponse response =
                 announcementService.createGuestAnnouncement(request);
@@ -62,9 +67,25 @@ public class AnnouncementController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    @PutMapping("/guest/{announcementCode}/client-info")
+    @Operation(summary = "비회원 기업정보 수정", description = "마감 전 비회원 공고의 기업정보를 수정합니다. 입찰 접수 후에는 필수 기업정보를 비울 수 없습니다.")
+    public ResponseEntity<ApiResponse<ClientInfoResponse>> updateGuestClientInfo(
+            @PathVariable String announcementCode,
+            @RequestBody @Valid ClientInfoRequest request) {
+        ClientInfoResponse response = clientService.updateGuestClientInfo(announcementCode, request);
+        return ResponseEntity.ok(ApiResponse.ok("기업 정보가 수정되었습니다.", response));
+    }
+
+    @PatchMapping("/guest/{announcementCode}/close")
+    @Operation(summary = "비회원 공고 마감", description = "공고 코드로 비회원 공고를 마감합니다. 기업정보가 완성되어 있고 입찰이 있어야 합니다.")
+    public ResponseEntity<ApiResponse<Void>> closeGuestAnnouncement(@PathVariable String announcementCode) {
+        announcementService.closeGuestAnnouncement(announcementCode);
+        return ResponseEntity.ok(ApiResponse.ok("공고가 마감되었습니다.", null));
+    }
+
     @PatchMapping("/{announcementCode}/close")
     @PreAuthorize("hasRole('CLIENT')")
-    @Operation(summary = "공고 마감", description = "기업정보가 완성된 경우에만 마감 가능합니다.")
+    @Operation(summary = "회원 공고 마감", description = "기업정보가 완성된 경우에만 마감 가능합니다.")
     public ResponseEntity<ApiResponse<Void>> closeAnnouncement(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable String announcementCode) {

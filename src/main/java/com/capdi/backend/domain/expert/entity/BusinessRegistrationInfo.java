@@ -45,6 +45,51 @@ public class BusinessRegistrationInfo extends BaseTimeEntity {
     @Column(name = "company_name", nullable = false, length = 100)
     private String companyName;
 
+    @Column(name = "opening_date")
+    private java.time.LocalDate openingDate;
+
+    @Column(name = "input_revision", nullable = false)
+    private long inputRevision;
+    @Column(name = "confirmed_input_revision")
+    private Long confirmedInputRevision;
+    @Column(name = "confirmed_file_id")
+    private Long confirmedFileId;
+    @Column(name = "confirmed_ocr_revision")
+    private Long confirmedOcrRevision;
+
+    private void inputChanged() {
+        inputRevision++;
+        confirmedInputRevision = null;
+        confirmedFileId = null;
+        confirmedOcrRevision = null;
+    }
+
+    public void markConfirmed(Long fileId, long ocrRevision) {
+        confirmedInputRevision = inputRevision;
+        confirmedFileId = fileId;
+        confirmedOcrRevision = ocrRevision;
+    }
+
+    public boolean isConfirmedFor(Long fileId, long ocrRevision) {
+        return java.util.Objects.equals(confirmedInputRevision, inputRevision)
+                && java.util.Objects.equals(confirmedFileId, fileId)
+                && java.util.Objects.equals(confirmedOcrRevision, ocrRevision);
+    }
+
+    public void updateOpeningDate(java.time.LocalDate openingDate) {
+        if (!java.util.Objects.equals(this.openingDate, openingDate)) inputChanged();
+        this.openingDate = openingDate;
+    }
+
+    public void confirm(String number, String representative, String company, java.time.LocalDate date) {
+        if (!java.util.Objects.equals(businessNumber, number) || !java.util.Objects.equals(representativeName, representative)
+                || !java.util.Objects.equals(companyName, company) || !java.util.Objects.equals(openingDate, date)) inputChanged();
+        this.businessNumber = number;
+        this.representativeName = representative;
+        this.companyName = company;
+        this.openingDate = date;
+    }
+
     public static BusinessRegistrationInfo create(
             ExpertProfile expertProfile,
             ExpertFile file,
@@ -67,6 +112,9 @@ public class BusinessRegistrationInfo extends BaseTimeEntity {
             String representativeName,
             String companyName
     ) {
+        if (!java.util.Objects.equals(this.file.getId(), file.getId()) || !java.util.Objects.equals(this.businessNumber, businessNumber)
+                || !java.util.Objects.equals(this.representativeName, representativeName)
+                || !java.util.Objects.equals(this.companyName, companyName)) inputChanged();
         this.file = file;
         this.businessNumber = businessNumber;
         this.representativeName = representativeName;

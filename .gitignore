@@ -48,3 +48,6 @@ logs/
 
 secrets/
 *.json
+
+# Local issue notes and generated documentation
+/docs/

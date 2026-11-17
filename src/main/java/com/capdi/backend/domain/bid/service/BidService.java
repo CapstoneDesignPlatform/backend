@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -40,15 +41,16 @@ public class BidService {
 
     @Transactional
     public BidResponse createBid(Long loginUserId, String announcementCode, BidCreateRequest request) {
+        // Lock before snapshot reads so a waiting bid sees committed company-info edits.
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
         ExpertProfile expertProfile = expertProfileRepository.findByUserId(loginUserId)
                 .orElseThrow(() -> new CustomException(ErrorCode.EXPERT_PROFILE_NOT_FOUND));
 
         if (expertProfile.getVerificationStatus() != VerificationStatusEnum.APPROVED) {
             throw new CustomException(ErrorCode.EXPERT_NOT_APPROVED);
         }
-
-        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
-                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
 
         if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_CLOSED);
@@ -58,13 +60,14 @@ public class BidService {
             throw new CustomException(ErrorCode.CLIENT_INFO_INCOMPLETE);
         }
 
-        if (bidRepository.existsByAnnouncementAndExpertUserId(announcement, loginUserId)) {
+        // A locking read sees bids committed while this request waited for the announcement lock.
+        if (bidRepository.findByAnnouncementAndExpertUserIdWithLock(announcement, loginUserId).isPresent()) {
             throw new CustomException(ErrorCode.BID_ALREADY_EXISTS);
         }
 
         Bid bid = Bid.create(announcement, expertProfile.getUser(), request.getBidAmount());
         Bid savedBid = bidRepository.save(bid);
-        long totalBidCount = bidRepository.countByAnnouncement(announcement);
+        long totalBidCount = bidRepository.countByAnnouncementCodeWithLock(announcementCode);
 
         return BidResponse.from(savedBid, totalBidCount);
     }
@@ -116,7 +119,25 @@ public class BidService {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
         }
 
-        if (announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION) {
+        return selectLockedAnnouncement(announcement, bidId, request);
+    }
+
+    @Transactional
+    public ExpertSelectResponse selectGuestExpert(String announcementCode, Long bidId, ExpertSelectRequest request) {
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        if (!announcement.isGuest()) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
+        }
+
+        return selectLockedAnnouncement(announcement, bidId, request);
+    }
+
+    private ExpertSelectResponse selectLockedAnnouncement(
+            Announcement announcement, Long bidId, ExpertSelectRequest request) {
+        if (announcement.getStatus() != AnnouncementStatusEnum.CLOSED
+                || announcement.getProgressStep() != AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION) {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_IN_SELECTION_STEP);
         }
 
@@ -125,6 +146,15 @@ public class BidService {
 
         if (selectedBid.getStatus() != BidStatusEnum.PENDING) {
             throw new CustomException(ErrorCode.BID_ALREADY_PROCESSED);
+        }
+
+        ExpertProfile selectedExpert = expertProfileRepository.findByUserId(selectedBid.getExpertUser().getId())
+                .orElseThrow(() -> new CustomException(ErrorCode.EXPERT_PROFILE_NOT_FOUND));
+
+        if (selectedExpert.getVerificationStatus() != VerificationStatusEnum.APPROVED
+                || expertProfileRepository.incrementSelectedCountIfApproved(
+                    selectedExpert.getId(), VerificationStatusEnum.APPROVED, LocalDateTime.now()) != 1) {
+            throw new CustomException(ErrorCode.EXPERT_NOT_APPROVED);
         }
 
         selectedBid.select(request.getFinalAmount());

@@ -1,5 +1,7 @@
 package com.capdi.backend.domain.expert.controller;
 
+import com.capdi.backend.domain.expert.dto.ExpertFileOcrResponse;
+
 import com.capdi.backend.domain.expert.dto.ExpertFileDownloadUrlResponse;
 import com.capdi.backend.domain.expert.dto.ExpertFileUploadResponse;
 import com.capdi.backend.domain.expert.service.ExpertFileService;
@@ -22,6 +24,14 @@ import java.nio.charset.StandardCharsets;
 public class ExpertFileController {
 
     private final ExpertFileService expertFileService;
+    private final com.capdi.backend.domain.expert.service.BusinessRegistrationInfoService businessRegistrationInfoService;
+
+    @GetMapping("/{fileId}/ocr-extraction")
+    public ResponseEntity<ApiResponse<com.capdi.backend.domain.expert.dto.BusinessRegistrationExtractionResponse>> getOcrExtraction(
+            @AuthenticationPrincipal CustomUserDetails userDetails, @PathVariable Long fileId) {
+        return ResponseEntity.ok(ApiResponse.ok(businessRegistrationInfoService.getOcrExtractionByFile(
+                userDetails.getUserId(), fileId)));
+    }
 
     @PostMapping
     public ResponseEntity<ApiResponse<ExpertFileUploadResponse>> uploadFile(
@@ -45,6 +55,12 @@ public class ExpertFileController {
                 "OCR 검증이 완료되었습니다.",
                 null
         ));
+    }
+
+    @GetMapping("/{fileId}/ocr")
+    public ResponseEntity<ApiResponse<ExpertFileOcrResponse>> getOcr(
+            @AuthenticationPrincipal CustomUserDetails userDetails, @PathVariable Long fileId) {
+        return ResponseEntity.ok(ApiResponse.ok(expertFileService.getOcrStatus(userDetails.getUserId(), fileId)));
     }
 
     @GetMapping("/{fileId}/download-url")

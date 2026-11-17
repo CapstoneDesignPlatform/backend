@@ -67,6 +67,10 @@ public class ClientInfo extends BaseTimeEntity {
     }
 
     public boolean isComplete() {
+        return hasRequiredCompanyInfo(companyName, businessNumber, address);
+    }
+
+    public static boolean hasRequiredCompanyInfo(String companyName, String businessNumber, String address) {
         return companyName != null && !companyName.isBlank()
                 && businessNumber != null && !businessNumber.isBlank()
                 && address != null && !address.isBlank();

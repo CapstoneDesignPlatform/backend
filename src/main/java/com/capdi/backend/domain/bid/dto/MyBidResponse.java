@@ -29,6 +29,9 @@ public class MyBidResponse {
     @JsonProperty("bid_amount")
     private BigDecimal bidAmount;
 
+    @JsonProperty("final_amount")
+    private BigDecimal finalAmount;
+
     private String status;
 
     @JsonProperty("submitted_at")
@@ -52,6 +55,7 @@ public class MyBidResponse {
                 .announcementCode(announcement.getAnnouncementCode())
                 .jobPostTitle(announcement.getDisplayTitle())
                 .bidAmount(bid.getBidAmount())
+                .finalAmount(bid.getFinalAmount())
                 .status(bid.getStatus().name())
                 .submittedAt(bid.getSubmittedAt())
                 .totalBidCount(totalBidCount)

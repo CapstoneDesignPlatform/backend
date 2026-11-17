@@ -4,10 +4,12 @@ import com.capdi.backend.domain.user.entity.User;
 import com.capdi.backend.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
 @Entity
+@DynamicUpdate
 @Table(name = "expert_profiles")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -25,6 +27,11 @@ public class ExpertProfile extends BaseTimeEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "membership_grade", nullable = false, length = 20)
+    @Builder.Default
+    private MembershipGradeEnum membershipGrade = MembershipGradeEnum.BUSINESS;
 
     @Column(nullable = false, length = 100)
     private String specialty;
@@ -78,6 +85,11 @@ public class ExpertProfile extends BaseTimeEntity {
             this.businessName = businessName;
         }
     }
+
+    public void incrementSelectedCount() {
+        this.selectedCount++;
+    }
+
     public void applyVerification(String specialty) {
         this.verificationStatus = VerificationStatusEnum.PENDING;
         this.isVerified = false;

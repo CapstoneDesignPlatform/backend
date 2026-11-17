@@ -41,6 +41,9 @@ public class AnnouncementDetailResponse {
     @JsonProperty("capital_scale")
     private BigDecimal capitalScale;
 
+    @JsonProperty("capital")
+    private BigDecimal capital;
+
     private String status;
 
     @JsonProperty("progress_step")
@@ -78,6 +81,7 @@ public class AnnouncementDetailResponse {
                 .currentIndustry(announcement.getCurrentIndustry() != null
                         ? announcement.getCurrentIndustry().getLabel() : null)
                 .capitalScale(announcement.getCapitalScale())
+                .capital(announcement.getCapital())
                 .status(announcement.getStatus().name())
                 .progressStep(step.getStepNumber())
                 .progressStepLabel(step.getLabel())
@@ -141,6 +145,8 @@ public class AnnouncementDetailResponse {
         private String address;
         private String email;
         private String contact;
+        private String website;
+        private String description;
 
         @JsonProperty("founded_date")
         private LocalDate foundedDate;
@@ -155,6 +161,8 @@ public class AnnouncementDetailResponse {
                     .address(clientInfo.getAddress())
                     .email(clientInfo.getEmail())
                     .contact(clientInfo.getContact())
+                    .website(clientInfo.getWebsite())
+                    .description(clientInfo.getDescription())
                     .foundedDate(clientInfo.getFoundedDate())
                     .capital(clientInfo.getCapital())
                     .build();
