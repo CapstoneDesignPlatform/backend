@@ -161,7 +161,7 @@ public class BidService {
 
         bidRepository.rejectAllPendingExcept(announcement, bidId, BidStatusEnum.REJECTED, BidStatusEnum.PENDING);
 
-        announcement.updateProgressStep(AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED);
+        // Selection stays at STEP_3 until the server verifies successful payment.
 
         return ExpertSelectResponse.from(selectedBid);
     }

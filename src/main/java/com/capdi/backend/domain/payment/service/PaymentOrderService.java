@@ -48,7 +48,8 @@ public class PaymentOrderService {
         var announcement = sources.lockAnnouncement(code)
                 .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
         if (!clientId.equals(announcement.ownerId())) throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
-        if (!"CLOSED".equals(announcement.status()) || !selectedStep(announcement.progressStep())) {
+        if (!"CLOSED".equals(announcement.status())
+                || !AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION.name().equals(announcement.progressStep())) {
             throw new CustomException(ErrorCode.PAYMENT_NOT_ELIGIBLE);
         }
         var bid = sources.lockBid(request.getBidId(), code)
@@ -90,13 +91,6 @@ public class PaymentOrderService {
         if (id == null) throw new CustomException(ErrorCode.UNAUTHORIZED);
         String role = sources.userType(id, lock).orElseThrow(() -> new CustomException(ErrorCode.UNAUTHORIZED));
         if (!"CLIENT".equals(role)) throw new CustomException(ErrorCode.FORBIDDEN);
-    }
-
-    private boolean selectedStep(String step) {
-        try {
-            return AnnouncementProgressStepEnum.valueOf(step).getStepNumber()
-                    >= AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED.getStepNumber();
-        } catch (IllegalArgumentException | NullPointerException e) { return false; }
     }
 
     private BigDecimal validAmount(BigDecimal amount) {

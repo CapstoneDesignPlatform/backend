@@ -120,7 +120,7 @@ class PaymentProcessingMySqlIntegrationTest {
                     .announcementCode("P57-"+UUID.randomUUID()).industry(IndustryTypeEnum.CONSTRUCTION)
                     .purpose(AnnouncementPurposeEnum.REQUIRED_LICENSE).jobType(JobTypeEnum.LICENSE)
                     .businessOwnerType(BusinessOwnerTypeEnum.CORPORATION).capital(new BigDecimal("1000000"))
-                    .status(AnnouncementStatusEnum.CLOSED).progressStep(AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED).build());
+                    .status(AnnouncementStatusEnum.CLOSED).progressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION).build());
             var b=Bid.create(a,expert,new BigDecimal("1000"));b.select(new BigDecimal("1000"));bids.saveAndFlush(b);
             return new long[]{client.getId(),expert.getId(),b.getId(),a.getId()};
         });
@@ -155,6 +155,64 @@ class PaymentProcessingMySqlIntegrationTest {
         return webhooks.receive(Map.of("X-Test-Signature",List.of("SYNTHETIC_SIGNATURE")),body);
     }
     long countAttempts(long payment){return jdbc.queryForObject("SELECT COUNT(*) FROM payment_attempts WHERE payment_id=?",Long.class,payment);}
+    String progress(Fixture f) {
+        return jdbc.queryForObject("SELECT a.progress_step FROM announcement a JOIN payments p ON p.announcement_id=a.id WHERE p.id=?",
+                String.class,f.payment());
+    }
+    void progress(Fixture f,String step) {
+        jdbc.update("UPDATE announcement SET progress_step=? WHERE id=(SELECT announcement_id FROM payments WHERE id=?)",step,f.payment());
+    }
+
+    @Test void orderAndPreparationStayAtStepThreeUntilVerifiedPayment() throws Exception {
+        Fixture f=order(PaymentMethod.CARD);
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
+        long a=ready(f);
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
+        assertThat(confirm(f,a,"start-diagnosis").data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+        assertThat(confirm(f,a,"start-diagnosis").status()).isEqualTo(200);
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"STEP_4_DIAGNOSIS_STARTED","STEP_5_ASSOCIATION_REVIEW",
+            "STEP_6_REPORT_SENT","STEP_7_COMPLETED"})
+    void repeatedPaidLookupNeverRewindsProgress(String step) throws Exception {
+        Fixture f=order(PaymentMethod.CARD);long a=ready(f);
+        assertThat(confirm(f,a,"paid").data().path("payment_status").asText()).isEqualTo("PAID");
+        progress(f,step);
+        assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo(step);
+    }
+
+    @Test void existingLegacyStepFourOrderCanStillComplete() throws Exception {
+        Fixture f=order(PaymentMethod.CARD);progress(f,"STEP_4_DIAGNOSIS_STARTED");long a=ready(f);
+        assertThat(confirm(f,a,"legacy").data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"rejected","amount","cancelled","owner","expert","multiple","step"})
+    void changedSelectionCannotAdvanceAnnouncement(String change) throws Exception {
+        Fixture f=order(PaymentMethod.CARD);long a=ready(f);
+        Payment p=payments.findById(f.payment()).orElseThrow();
+        switch(change) {
+            case "rejected" -> jdbc.update("UPDATE bids SET status='REJECTED' WHERE id=?",p.getBidId());
+            case "amount" -> jdbc.update("UPDATE bids SET final_amount=2000 WHERE id=?",p.getBidId());
+            case "cancelled" -> jdbc.update("UPDATE announcement SET status='CANCELLED' WHERE id=?",p.getAnnouncementId());
+            case "owner" -> jdbc.update("UPDATE announcement SET user_id=NULL WHERE id=?",p.getAnnouncementId());
+            case "expert" -> jdbc.update("UPDATE bids SET expert_user_id=? WHERE id=?",f.client(),p.getBidId());
+            case "multiple" -> new TransactionTemplate(manager).execute(tx->{
+                Bid other=Bid.create(announcements.findById(p.getAnnouncementId()).orElseThrow(),
+                        users.findById(f.expert()).orElseThrow(),new BigDecimal("1000"));
+                other.select(new BigDecimal("1000"));return bids.saveAndFlush(other);
+            });
+            case "step" -> progress(f,"STEP_2_BID_CLOSED");
+        }
+        String before=progress(f);
+        var reply=confirm(f,a,"changed-source");
+        assertThat(reply.data().path("failure").asText()).isEqualTo("INCONSISTENT_STATE");
+        assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(progress(f)).isEqualTo(before);
+    }
 
     @Test void preparePersistsOnlyPreparedAndDoesNotPay() throws Exception {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
@@ -200,6 +258,7 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(r.data().path("payment_status").asText()).isEqualTo("UNKNOWN");
         assertThat(r.data().path("failure").asText()).isEqualTo("RESPONSE_MISMATCH");
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
     }
     @Test void duplicateProviderTransactionIsNotAssignedToTwoPayments() throws Exception {
         Fixture one=order(PaymentMethod.CARD),two=order(PaymentMethod.CARD);long a=ready(one),b=ready(two);
@@ -223,7 +282,9 @@ class PaymentProcessingMySqlIntegrationTest {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
         fake.confirmFunction=r->{fake.publish(r,PaymentGateway.State.PAID);throw new PaymentGateway.GatewayException(PaymentProcessingFailure.TIMEOUT);};
         assertThat(confirm(f,a,"timeout").data().path("payment_status").asText()).isEqualTo("UNKNOWN");
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(1);assertThat(fake.fetches).hasValue(1);
     }
     @Test void remoteSuccessThenDatabaseFailureIsRecoveredWithoutSecondConfirmation() throws Exception {
@@ -232,8 +293,10 @@ class PaymentProcessingMySqlIntegrationTest {
         Reply uncertain=confirm(f,a,"storage");
         assertThat(uncertain.data().path("failure").asText()).isEqualTo("STORAGE_FAILURE");
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         reset(payments);
         assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(1);
     }
     @Test void virtualAccountIssuanceNeedsActualDepositProof() throws Exception {
@@ -241,9 +304,11 @@ class PaymentProcessingMySqlIntegrationTest {
         fake.prepareFunction=r->fake.publish(r,PaymentGateway.State.WAITING_DEPOSIT);
         Reply first=prepare(f,"vbank",PaymentMethod.VIRTUAL_ACCOUNT);long a=first.data().path("attempt_id").asLong();
         assertThat(first.data().path("payment_status").asText()).isEqualTo("WAITING_DEPOSIT");
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
         fake.publish(ref(a),PaymentGateway.State.PAID);var receipt=receive(a,"deposit","CLAIMED_DEPOSIT");webhooks.process(receipt.id());
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(0);assertThat(fake.fetches).hasValue(1);
     }
     @Test void verifiedInboxIsDurableAndDuplicateEventIsIdempotent() throws Exception {
@@ -344,6 +409,7 @@ class PaymentProcessingMySqlIntegrationTest {
             assertThat(two.get(30,TimeUnit.SECONDS).status()).isEqualTo(200);
             assertThat(fake.confirms).hasValue(1);
             assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         } finally {pool.shutdownNow();}
     }
     @Test void stalePrepareCompletionCannotOverwriteReconciledPaidState() throws Exception {
@@ -419,6 +485,7 @@ class PaymentProcessingMySqlIntegrationTest {
         fake.publish(ref(a),PaymentGateway.State.PAID);((MutableClock)clock).advance(31);
         recovery.runDue();
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(0);
         assertThat(fake.fetches.get()).isGreaterThanOrEqualTo(1);
     }
@@ -427,6 +494,7 @@ class PaymentProcessingMySqlIntegrationTest {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
         fake.confirmFunction=r->fake.publish(r,state);
         assertThat(confirm(f,a,"terminal").data().path("payment_status").asText()).isEqualTo(state.name());
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
         assertThat(prepare(f,"new",PaymentMethod.CARD).status()).isEqualTo(409);
         assertThat(fake.confirms).hasValue(1);

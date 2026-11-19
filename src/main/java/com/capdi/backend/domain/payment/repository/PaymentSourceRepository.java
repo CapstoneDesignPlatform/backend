@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-/** Scalar locking reads bypass OSIV's managed entity cache. No source domain is modified. */
+/** Scalar locking reads bypass OSIV's managed entity cache. */
 @Repository
 @RequiredArgsConstructor
 public class PaymentSourceRepository {
@@ -40,6 +40,13 @@ public class PaymentSourceRepository {
     public Optional<Long> expertProfileId(Long expertUserId) {
         return jdbc.query("SELECT id FROM expert_profiles WHERE user_id = ?",
                 (rs, row) -> rs.getLong(1), expertUserId).stream().findFirst();
+    }
+
+    /** Caller holds the announcement lock; participates in the payment completion transaction. */
+    public int startDiagnosisAfterPayment(Long announcementId) {
+        return jdbc.update("UPDATE announcement SET progress_step = 'STEP_4_DIAGNOSIS_STARTED', " +
+                        "updated_at = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'CLOSED' " +
+                        "AND progress_step = 'STEP_3_EXPERT_SELECTION'", announcementId);
     }
 
     public record AnnouncementSnapshot(Long id, Long ownerId, String status, String progressStep) { }

@@ -1,5 +1,6 @@
 package com.capdi.backend.domain.payment.service;
 
+import com.capdi.backend.domain.announcement.entity.AnnouncementProgressStepEnum;
 import com.capdi.backend.domain.payment.dto.*;
 import com.capdi.backend.domain.payment.entity.*;
 import com.capdi.backend.domain.payment.gateway.PaymentGateway;
@@ -76,10 +77,20 @@ public class PaymentExecutionPersistenceService {
 
     @Transactional(propagation=Propagation.REQUIRES_NEW,isolation=Isolation.READ_COMMITTED)
     public PaymentAttemptResponse complete(Execution execution,PaymentGateway.Observation result) {
-        Payment p=owned(execution.user(),execution.payment(),true);PaymentAttempt a=attempt(p,execution.attempt());
+        // Same lock order as order creation: payer -> announcement -> bids -> payment -> attempt.
+        requireClient(execution.user(),true);
+        Payment snapshot=ownedPayment(execution.user(),execution.payment(),false);
+        var announcement=sources.lockAnnouncement(snapshot.getAnnouncementCode());
+        var bid=sources.lockBid(snapshot.getBidId(),snapshot.getAnnouncementCode());
+        var selectedIds=sources.lockSelectedBidIds(snapshot.getAnnouncementCode());
+        Payment p=ownedPayment(execution.user(),execution.payment(),true);
+        PaymentAttempt a=attempt(p,execution.attempt());
         verifyToken(p,a,execution.token());
         if(!PaymentGatewaySafety.matches(a,result))return uncertain(p,a,PaymentProcessingFailure.RESPONSE_MISMATCH);
         if(p.getStatus()==PaymentStatus.PAID && result.state()!=PaymentGateway.State.PAID)
+            return uncertain(p,a,PaymentProcessingFailure.INCONSISTENT_STATE);
+        if(result.state()==PaymentGateway.State.PAID
+                && !matchesSelectedSource(p,announcement.orElse(null),bid.orElse(null),selectedIds))
             return uncertain(p,a,PaymentProcessingFailure.INCONSISTENT_STATE);
         a.observed(result);
         PaymentStatus next=switch(a.getStatus()) {
@@ -91,6 +102,11 @@ public class PaymentExecutionPersistenceService {
             case UNKNOWN -> PaymentStatus.UNKNOWN;
         };
         p.recordAttempt(a.getId(),next,clock.instant());
+        if(next==PaymentStatus.PAID
+                && AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION.name().equals(announcement.orElseThrow().progressStep())) {
+            if(sources.startDiagnosisAfterPayment(p.getAnnouncementId())!=1)
+                throw new IllegalStateException("Payment announcement transition failed");
+        }
         var j=job(a);
         if(next==PaymentStatus.PAID || next==PaymentStatus.FAILED || next==PaymentStatus.CANCELED)
             j.complete();
@@ -125,13 +141,34 @@ public class PaymentExecutionPersistenceService {
         if(!p.ownsAttempt(a.getId()) || !a.tokenMatches(token))throw new CustomException(ErrorCode.PAYMENT_EXECUTION_STALE);
     }
     private Payment owned(Long user,Long id,boolean lock) {
+        requireClient(user,lock);
+        return ownedPayment(user,id,lock);
+    }
+    private void requireClient(Long user,boolean lock) {
         if(user==null)throw new CustomException(ErrorCode.UNAUTHORIZED);
         String role=sources.userType(user,lock).orElseThrow(()->new CustomException(ErrorCode.UNAUTHORIZED));
         if(!"CLIENT".equals(role))throw new CustomException(ErrorCode.FORBIDDEN);
+    }
+    private Payment ownedPayment(Long user,Long id,boolean lock) {
         Payment p=(lock?payments.lockById(id):payments.findById(id)).orElseThrow(()->new CustomException(ErrorCode.PAYMENT_NOT_FOUND));
         if(lock)em.refresh(p,LockModeType.PESSIMISTIC_WRITE);
         if(!p.getClientUserId().equals(user))throw new CustomException(ErrorCode.FORBIDDEN);
         return p;
+    }
+    private boolean matchesSelectedSource(Payment p,PaymentSourceRepository.AnnouncementSnapshot announcement,
+                                          PaymentSourceRepository.BidSnapshot bid,List<Long> selectedIds) {
+        if(announcement==null || bid==null || !p.getAnnouncementId().equals(announcement.id())
+                || !p.getClientUserId().equals(announcement.ownerId()) || !"CLOSED".equals(announcement.status())
+                || !p.getBidId().equals(bid.id()) || !"SELECTED".equals(bid.status())
+                || !selectedIds.equals(List.of(p.getBidId())) || bid.finalAmount()==null
+                || p.getAmount().compareTo(bid.finalAmount())!=0
+                || !sources.expertProfileId(bid.expertUserId()).filter(p.getExpertProfileId()::equals).isPresent())
+            return false;
+        try {
+            // Existing STEP_4+ orders can still settle; duplicate results never rewind later steps.
+            return AnnouncementProgressStepEnum.valueOf(announcement.progressStep()).getStepNumber()
+                    >= AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION.getStepNumber();
+        } catch(IllegalArgumentException | NullPointerException ignored) {return false;}
     }
     private PaymentAttempt attempt(Payment p,Long id) {
         PaymentAttempt a=attempts.findById(id).orElseThrow(()->new CustomException(ErrorCode.NOT_FOUND));refresh(a);

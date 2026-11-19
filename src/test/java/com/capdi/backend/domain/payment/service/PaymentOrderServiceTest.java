@@ -31,7 +31,7 @@ class PaymentOrderServiceTest {
         sources = mock(PaymentSourceRepository.class); service = new PaymentOrderService(payments, keys, sources);
         when(sources.userType(1L, true)).thenReturn(Optional.of("CLIENT"));
         when(sources.userType(1L, false)).thenReturn(Optional.of("CLIENT"));
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED","STEP_4_DIAGNOSIS_STARTED")));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED","STEP_3_EXPERT_SELECTION")));
         when(sources.lockBid(10L,CODE)).thenReturn(Optional.of(new BidSnapshot(10L,3L,"SELECTED",new BigDecimal("1000000.00"))));
         when(sources.lockSelectedBidIds(CODE)).thenReturn(List.of(10L));
         when(sources.expertProfileId(3L)).thenReturn(Optional.of(4L));
@@ -81,16 +81,17 @@ class PaymentOrderServiceTest {
     }
     @ParameterizedTest @ValueSource(strings={"ACTIVE","CANCELLED"})
     void rejectsNonClosedAnnouncement(String state) throws Exception {
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,state,"STEP_4_DIAGNOSIS_STARTED")));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,state,"STEP_3_EXPERT_SELECTION")));
         expect(ErrorCode.PAYMENT_NOT_ELIGIBLE,()->service.create(1L,CODE,KEY,request(10,"CARD")));
     }
-    @ParameterizedTest @ValueSource(strings={"STEP_1_REGISTERED","STEP_3_EXPERT_SELECTION","UNKNOWN"})
+    @ParameterizedTest @ValueSource(strings={"STEP_1_REGISTERED","STEP_2_BID_CLOSED","STEP_4_DIAGNOSIS_STARTED",
+            "STEP_5_ASSOCIATION_REVIEW","STEP_6_REPORT_SENT","STEP_7_COMPLETED","UNKNOWN"})
     void rejectsUnselectedStep(String step) throws Exception {
         when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED",step)));
         expect(ErrorCode.PAYMENT_NOT_ELIGIBLE,()->service.create(1L,CODE,KEY,request(10,"CARD")));
     }
     @Test void rejectsOtherOwner() throws Exception {
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,99L,"CLOSED","STEP_4_DIAGNOSIS_STARTED")));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,99L,"CLOSED","STEP_3_EXPERT_SELECTION")));
         expect(ErrorCode.ANNOUNCEMENT_FORBIDDEN,()->service.create(1L,CODE,KEY,request(10,"CARD")));
     }
     @Test void rejectsMissingAnnouncement() throws Exception {
