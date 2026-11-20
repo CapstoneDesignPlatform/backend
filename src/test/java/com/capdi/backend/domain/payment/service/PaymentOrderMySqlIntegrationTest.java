@@ -114,7 +114,7 @@ class PaymentOrderMySqlIntegrationTest {
                     .purpose(AnnouncementPurposeEnum.REQUIRED_LICENSE).jobType(JobTypeEnum.LICENSE)
                     .businessOwnerType(BusinessOwnerTypeEnum.CORPORATION).capital(new BigDecimal("1000000"))
                     .status(AnnouncementStatusEnum.CLOSED)
-                    .progressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION).build());
+                    .progressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION).selectionRound(1).build());
             Bid bid=Bid.create(a,expert,new BigDecimal("1100000"));bid.select(new BigDecimal("1000000"));
             bids.saveAndFlush(bid);
             return new Fixture(client.getId(),expert.getId(),profile.getId(),a.getId(),bid.getId(),a.getAnnouncementCode());
@@ -268,7 +268,7 @@ class PaymentOrderMySqlIntegrationTest {
         Fixture f=fixture();long id=create(f,"constraints").data().path("payment_id").asLong();
         assertThatThrownBy(()->new TransactionTemplate(manager).execute(tx->
                 payments.saveAndFlush(Payment.create(f.bid(),f.announcement(),f.code(),f.client(),f.expertProfile(),
-                        new BigDecimal("1000000"),PaymentMethod.CARD)))).isInstanceOf(DataIntegrityViolationException.class);
+                        new BigDecimal("1000000"),PaymentMethod.CARD, 1)))).isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(()->jdbc.update("DELETE FROM bids WHERE id=?",f.bid())).isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(()->jdbc.update("UPDATE payments SET amount=0 WHERE id=?",id))
                 .isInstanceOfSatisfying(org.springframework.jdbc.UncategorizedSQLException.class,
@@ -284,9 +284,9 @@ class PaymentOrderMySqlIntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
     @Test void fullFlywayAndHibernateSchemaValidate() {
-        assertThat(flyway.info().applied()).hasSize(26);
+        assertThat(flyway.info().applied()).hasSize(27);
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,26).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,27).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(entityManager.getEntityManagerFactory().getMetamodel().getEntities())
                 .extracting(t->t.getJavaType().getName()).contains(Payment.class.getName(),PaymentAttempt.class.getName(),PaymentIdempotencyKey.class.getName());

@@ -6,12 +6,14 @@ import com.capdi.backend.domain.announcement.repository.AnnouncementRepository;
 import com.capdi.backend.domain.announcement.entity.AnnouncementProgressStepEnum;
 import com.capdi.backend.domain.bid.dto.BidCreateRequest;
 import com.capdi.backend.domain.bid.dto.BidResponse;
+import com.capdi.backend.domain.bid.dto.BidUpdateRequest;
 import com.capdi.backend.domain.bid.dto.ExpertSelectRequest;
 import com.capdi.backend.domain.bid.dto.ExpertSelectResponse;
 import com.capdi.backend.domain.bid.dto.MyBidResponse;
 import com.capdi.backend.domain.bid.entity.Bid;
 import com.capdi.backend.domain.bid.entity.BidStatusEnum;
 import com.capdi.backend.domain.bid.repository.BidRepository;
+import com.capdi.backend.domain.bid.repository.BidSelectionHistoryRepository;
 import com.capdi.backend.domain.expert.entity.ExpertProfile;
 import com.capdi.backend.domain.expert.entity.VerificationStatusEnum;
 import com.capdi.backend.domain.expert.repository.ExpertProfileRepository;
@@ -38,6 +40,7 @@ public class BidService {
     private final BidRepository bidRepository;
     private final AnnouncementRepository announcementRepository;
     private final ExpertProfileRepository expertProfileRepository;
+    private final BidSelectionHistoryRepository selectionHistory;
 
     @Transactional
     public BidResponse createBid(Long loginUserId, String announcementCode, BidCreateRequest request) {
@@ -70,6 +73,39 @@ public class BidService {
         long totalBidCount = bidRepository.countByAnnouncementCodeWithLock(announcementCode);
 
         return BidResponse.from(savedBid, totalBidCount);
+    }
+
+    @Transactional
+    public BidResponse updateBid(Long loginUserId, String announcementCode, BidUpdateRequest request) {
+        if (loginUserId == null) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+
+        // Match creation/closing lock order so a waiting update checks the current state.
+        Announcement announcement = announcementRepository.findByAnnouncementCodeWithLock(announcementCode)
+                .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
+
+        ExpertProfile expertProfile = expertProfileRepository.findByUserId(loginUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.EXPERT_PROFILE_NOT_FOUND));
+        if (expertProfile.getVerificationStatus() != VerificationStatusEnum.APPROVED) {
+            throw new CustomException(ErrorCode.EXPERT_NOT_APPROVED);
+        }
+
+        if (announcement.getStatus() != AnnouncementStatusEnum.ACTIVE) {
+            throw new CustomException(ErrorCode.ANNOUNCEMENT_CLOSED);
+        }
+
+        Bid bid = bidRepository.findByAnnouncementAndExpertUserIdWithLock(announcement, loginUserId)
+                .orElseThrow(() -> new CustomException(ErrorCode.BID_NOT_FOUND));
+        if (bid.getStatus() != BidStatusEnum.PENDING) {
+            throw new CustomException(ErrorCode.BID_ALREADY_PROCESSED);
+        }
+
+        if (bid.getBidAmount().compareTo(request.getBidAmount()) != 0) {
+            bid.updateAmount(request.getBidAmount());
+        }
+        long totalBidCount = bidRepository.countByAnnouncementCodeWithLock(announcementCode);
+        return BidResponse.from(bid, totalBidCount);
     }
 
     public PageResponse<MyBidResponse> getMyBids(
@@ -111,6 +147,9 @@ public class BidService {
 
     @Transactional
     public ExpertSelectResponse selectExpert(Long userId, String announcementCode, Long bidId, ExpertSelectRequest request) {
+        if(userId==null)throw new CustomException(ErrorCode.UNAUTHORIZED);
+        String role=selectionHistory.lockUserType(userId).orElseThrow(()->new CustomException(ErrorCode.UNAUTHORIZED));
+        if(!"CLIENT".equals(role))throw new CustomException(ErrorCode.FORBIDDEN);
         Announcement announcement = announcementRepository
                 .findByAnnouncementCodeWithLock(announcementCode)
                 .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
@@ -141,10 +180,12 @@ public class BidService {
             throw new CustomException(ErrorCode.ANNOUNCEMENT_NOT_IN_SELECTION_STEP);
         }
 
-        Bid selectedBid = bidRepository.findByIdAndAnnouncement(bidId, announcement)
+        List<Bid> currentBids = bidRepository.findAllByAnnouncementWithLock(announcement);
+        Bid selectedBid = currentBids.stream().filter(b -> b.getId().equals(bidId)).findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.BID_NOT_FOUND));
 
-        if (selectedBid.getStatus() != BidStatusEnum.PENDING) {
+        if (selectedBid.getStatus() != BidStatusEnum.PENDING
+                || currentBids.stream().anyMatch(b -> b.getStatus() == BidStatusEnum.SELECTED)) {
             throw new CustomException(ErrorCode.BID_ALREADY_PROCESSED);
         }
 
@@ -157,9 +198,12 @@ public class BidService {
             throw new CustomException(ErrorCode.EXPERT_NOT_APPROVED);
         }
 
+        long round = announcement.nextSelectionRound();
         selectedBid.select(request.getFinalAmount());
 
-        bidRepository.rejectAllPendingExcept(announcement, bidId, BidStatusEnum.REJECTED, BidStatusEnum.PENDING);
+        bidRepository.rejectAllPendingExcept(announcement, bidId, BidStatusEnum.REJECTED, BidStatusEnum.PENDING, round);
+        selectionHistory.recordSelection(announcement.getId(), bidId, round, selectedExpert.getId(),
+                announcement.getUser() == null ? null : announcement.getUser().getId(), request.getFinalAmount());
 
         // Selection stays at STEP_3 until the server verifies successful payment.
 

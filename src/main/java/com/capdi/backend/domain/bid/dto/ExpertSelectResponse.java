@@ -26,6 +26,9 @@ public class ExpertSelectResponse {
     @JsonProperty("announcement_code")
     private String announcementCode;
 
+    @JsonProperty("selection_round")
+    private long selectionRound;
+
     public static ExpertSelectResponse from(Bid bid) {
         return ExpertSelectResponse.builder()
                 .bidId(bid.getId())
@@ -33,6 +36,7 @@ public class ExpertSelectResponse {
                 .bidAmount(bid.getBidAmount())
                 .finalAmount(bid.getFinalAmount())
                 .announcementCode(bid.getAnnouncement().getAnnouncementCode())
+                .selectionRound(bid.getAnnouncement().getSelectionRound())
                 .build();
     }
 }

@@ -30,7 +30,14 @@ public class PaymentExecutionPersistenceService {
     @Transactional(propagation=Propagation.REQUIRES_NEW,isolation=Isolation.READ_COMMITTED)
     public Execution prepare(Long user,Long paymentId,String rawKey,PaymentMethod method) {
         String hash=PaymentProcessingKeys.requestKey(rawKey);
-        Payment p=owned(user,paymentId,true);
+        requireClient(user,true);
+        Payment snapshot=ownedPayment(user,paymentId,false);
+        var announcement=sources.lockAnnouncement(snapshot.getAnnouncementCode());
+        var bid=sources.lockBid(snapshot.getBidId(),snapshot.getAnnouncementCode());
+        var selectedIds=sources.lockSelectedBidIds(snapshot.getAnnouncementCode());
+        Payment p=ownedPayment(user,paymentId,true);
+        if(p.getStatus()==PaymentStatus.CANCELED
+                || !matchesSelectedSource(p,announcement.orElse(null),bid.orElse(null),selectedIds))throw conflict();
         if(method==null || p.getMethod()!=method)throw conflict();
         var existing=attempts.findByPaymentIdAndRequestKeyHash(paymentId,hash);
         if(existing.isPresent())return execution(user,p,refresh(existing.get()),false);
@@ -158,6 +165,7 @@ public class PaymentExecutionPersistenceService {
     private boolean matchesSelectedSource(Payment p,PaymentSourceRepository.AnnouncementSnapshot announcement,
                                           PaymentSourceRepository.BidSnapshot bid,List<Long> selectedIds) {
         if(announcement==null || bid==null || !p.getAnnouncementId().equals(announcement.id())
+                || p.getSelectionRound()!=announcement.selectionRound()
                 || !p.getClientUserId().equals(announcement.ownerId()) || !"CLOSED".equals(announcement.status())
                 || !p.getBidId().equals(bid.id()) || !"SELECTED".equals(bid.status())
                 || !selectedIds.equals(List.of(p.getBidId())) || bid.finalAmount()==null

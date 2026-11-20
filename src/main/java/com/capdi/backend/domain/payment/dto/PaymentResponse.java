@@ -14,6 +14,7 @@ public class PaymentResponse {
     @JsonProperty("order_id") private String orderId;
     @JsonProperty("announcement_code") private String announcementCode;
     @JsonProperty("bid_id") private Long bidId;
+    @JsonProperty("selection_round") private long selectionRound;
     private BigDecimal amount;
     private String currency;
     private PaymentStatus status;
@@ -22,6 +23,7 @@ public class PaymentResponse {
     public static PaymentResponse from(Payment payment) {
         return PaymentResponse.builder().paymentId(payment.getId()).orderId(payment.getOrderId())
                 .announcementCode(payment.getAnnouncementCode()).bidId(payment.getBidId())
+                .selectionRound(payment.getSelectionRound())
                 .amount(payment.getAmount()).currency(payment.getCurrency()).status(payment.getStatus())
                 .createdAt(payment.getCreatedAt()).build();
     }

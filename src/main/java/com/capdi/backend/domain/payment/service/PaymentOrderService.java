@@ -49,7 +49,8 @@ public class PaymentOrderService {
                 .orElseThrow(() -> new CustomException(ErrorCode.ANNOUNCEMENT_NOT_FOUND));
         if (!clientId.equals(announcement.ownerId())) throw new CustomException(ErrorCode.ANNOUNCEMENT_FORBIDDEN);
         if (!"CLOSED".equals(announcement.status())
-                || !AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION.name().equals(announcement.progressStep())) {
+                || !AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION.name().equals(announcement.progressStep())
+                || announcement.selectionRound() < 1) {
             throw new CustomException(ErrorCode.PAYMENT_NOT_ELIGIBLE);
         }
         var bid = sources.lockBid(request.getBidId(), code)
@@ -61,12 +62,12 @@ public class PaymentOrderService {
         BigDecimal amount = validAmount(bid.finalAmount());
         Long expert = sources.expertProfileId(bid.expertUserId())
                 .orElseThrow(() -> new CustomException(ErrorCode.EXPERT_PROFILE_NOT_FOUND));
-        var priorPayment = payments.findByBidIdForUpdate(bid.id());
+        var priorPayment = payments.findByBidIdAndSelectionRoundForUpdate(bid.id(), announcement.selectionRound());
         Payment payment;
         boolean created = priorPayment.isEmpty();
         if (created) {
             payment = payments.saveAndFlush(Payment.create(bid.id(), announcement.id(), code, clientId,
-                    expert, amount, request.getMethod()));
+                    expert, amount, request.getMethod(), announcement.selectionRound()));
         } else {
             payment = priorPayment.get();
             if (payment.getMethod() != request.getMethod() || payment.getAmount().compareTo(amount) != 0

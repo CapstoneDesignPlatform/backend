@@ -10,7 +10,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "payments", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_payments_bid", columnNames = "bid_id"),
+        @UniqueConstraint(name = "uk_payments_bid_round", columnNames = {"bid_id", "selection_round"}),
         @UniqueConstraint(name = "uk_payments_order", columnNames = "order_id")
 })
 @Getter
@@ -23,6 +23,8 @@ public class Payment extends BaseTimeEntity {
     // Immutable financial references; SQL FKs prohibit deleting their source rows.
     @Column(name = "bid_id", nullable = false, updatable = false)
     private Long bidId;
+    @Column(name = "selection_round", nullable = false, updatable = false)
+    private long selectionRound;
     @Column(name = "announcement_id", nullable = false, updatable = false)
     private Long announcementId;
     @Column(name = "announcement_code", nullable = false, length = 50, updatable = false)
@@ -51,15 +53,16 @@ public class Payment extends BaseTimeEntity {
     private long version;
 
     public static Payment create(Long bidId, Long announcementId, String announcementCode, Long clientUserId,
-                                 Long expertProfileId, BigDecimal amount, PaymentMethod method) {
+                                 Long expertProfileId, BigDecimal amount, PaymentMethod method, long selectionRound) {
         if (bidId == null || announcementId == null || announcementCode == null || clientUserId == null
-                || expertProfileId == null || method == null || amount == null || amount.signum() <= 0
+                || expertProfileId == null || method == null || selectionRound < 1 || amount == null || amount.signum() <= 0
                 || amount.stripTrailingZeros().scale() > 0 || amount.compareTo(new BigDecimal("9999999999999")) > 0) {
             throw new IllegalArgumentException("Invalid payment snapshot");
         }
         Payment payment = new Payment();
         payment.orderId = "pay_" + UUID.randomUUID();
         payment.bidId = bidId;
+        payment.selectionRound = selectionRound;
         payment.announcementId = announcementId;
         payment.announcementCode = announcementCode;
         payment.clientUserId = clientUserId;
@@ -77,6 +80,11 @@ public class Payment extends BaseTimeEntity {
 
     @Column(name="active_attempt_id") private Long activeAttemptId;
     @Column(name="paid_at") private java.time.Instant paidAt;
+    public void cancelUnattemptedOrder() {
+        if(status!=PaymentStatus.CREATED || activeAttemptId!=null)
+            throw new IllegalStateException("Only unattempted orders can be canceled with selection");
+        status=PaymentStatus.CANCELED;
+    }
     public void beginAttempt(Long attempt) {
         if(status!=PaymentStatus.CREATED || activeAttemptId!=null)throw new IllegalStateException("Payment cannot start another attempt");
         activeAttemptId=attempt;status=PaymentStatus.PROCESSING;

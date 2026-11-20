@@ -55,6 +55,7 @@ public class SecurityConfig {
                         .requestMatchers("/files/**").hasRole("EXPERT")
                         .requestMatchers("/users/**").authenticated()
                         .requestMatchers("/payments/**", "/announcements/*/payments").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/announcements/*/bids/*/cancel-selection").hasRole("CLIENT")
                         .anyRequest().permitAll()
                 )
                 .exceptionHandling(ex -> ex

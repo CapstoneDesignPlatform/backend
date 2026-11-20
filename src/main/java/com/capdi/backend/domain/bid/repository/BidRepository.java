@@ -32,6 +32,10 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
             @Param("announcement") Announcement announcement, @Param("expertUserId") Long expertUserId);
 
     List<Bid> findAllByAnnouncement(Announcement announcement);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Bid b WHERE b.announcement = :announcement ORDER BY b.id")
+    List<Bid> findAllByAnnouncementWithLock(@Param("announcement") Announcement announcement);
     List<Bid> findAllByAnnouncementIn(List<Announcement> announcements);
     List<Bid> findAllByAnnouncementInAndStatus(List<Announcement> announcements, BidStatusEnum status);
     Optional<Bid> findByIdAndAnnouncement(Long id, Announcement announcement);
@@ -47,13 +51,14 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
     long countInProgressBidsByClientInfoIdWithLock(@Param("clientInfoId") Long clientInfoId);
 
     @Modifying
-    @Query("UPDATE Bid b SET b.status = :rejected " +
+    @Query("UPDATE Bid b SET b.status = :rejected, b.rejectedSelectionRound = :selectionRound " +
            "WHERE b.announcement = :announcement AND b.id != :bidId AND b.status = :pending")
     void rejectAllPendingExcept(
             @Param("announcement") Announcement announcement,
             @Param("bidId") Long bidId,
             @Param("rejected") BidStatusEnum rejected,
-            @Param("pending") BidStatusEnum pending);
+            @Param("pending") BidStatusEnum pending,
+            @Param("selectionRound") long selectionRound);
 
     @Query("SELECT b.announcement.id, COUNT(b) FROM Bid b WHERE b.announcement.id IN :announcementIds GROUP BY b.announcement.id")
     List<Object[]> countsByAnnouncementIds(@Param("announcementIds") List<Long> announcementIds);
