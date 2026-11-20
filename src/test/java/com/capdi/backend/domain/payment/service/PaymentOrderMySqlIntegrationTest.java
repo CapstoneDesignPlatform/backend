@@ -114,7 +114,7 @@ class PaymentOrderMySqlIntegrationTest {
                     .purpose(AnnouncementPurposeEnum.REQUIRED_LICENSE).jobType(JobTypeEnum.LICENSE)
                     .businessOwnerType(BusinessOwnerTypeEnum.CORPORATION).capital(new BigDecimal("1000000"))
                     .status(AnnouncementStatusEnum.CLOSED)
-                    .progressStep(AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED).build());
+                    .progressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION).selectionRound(1).build());
             Bid bid=Bid.create(a,expert,new BigDecimal("1100000"));bid.select(new BigDecimal("1000000"));
             bids.saveAndFlush(bid);
             return new Fixture(client.getId(),expert.getId(),profile.getId(),a.getId(),bid.getId(),a.getAnnouncementCode());
@@ -225,8 +225,8 @@ class PaymentOrderMySqlIntegrationTest {
                 amount==null?null:new BigDecimal(amount),f.bid());
         assertThat(create(f,"amount").status()).isEqualTo(409);assertThat(orderCount(f)).isZero();
     }
-    @Test void earlierSelectionStepCannotOpenPayment() throws Exception {
-        Fixture f=fixture();jdbc.update("UPDATE announcement SET progress_step='STEP_3_EXPERT_SELECTION' WHERE id=?",f.announcement());
+    @Test void diagnosisStepCannotOpenNewPayment() throws Exception {
+        Fixture f=fixture();jdbc.update("UPDATE announcement SET progress_step='STEP_4_DIAGNOSIS_STARTED' WHERE id=?",f.announcement());
         assertThat(create(f,"step").status()).isEqualTo(409);
     }
     @Test void requestCannotOverrideDbAmountExpertOrFeeRate() throws Exception {
@@ -268,7 +268,7 @@ class PaymentOrderMySqlIntegrationTest {
         Fixture f=fixture();long id=create(f,"constraints").data().path("payment_id").asLong();
         assertThatThrownBy(()->new TransactionTemplate(manager).execute(tx->
                 payments.saveAndFlush(Payment.create(f.bid(),f.announcement(),f.code(),f.client(),f.expertProfile(),
-                        new BigDecimal("1000000"),PaymentMethod.CARD)))).isInstanceOf(DataIntegrityViolationException.class);
+                        new BigDecimal("1000000"),PaymentMethod.CARD, 1)))).isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(()->jdbc.update("DELETE FROM bids WHERE id=?",f.bid())).isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(()->jdbc.update("UPDATE payments SET amount=0 WHERE id=?",id))
                 .isInstanceOfSatisfying(org.springframework.jdbc.UncategorizedSQLException.class,
@@ -284,9 +284,9 @@ class PaymentOrderMySqlIntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
     @Test void fullFlywayAndHibernateSchemaValidate() {
-        assertThat(flyway.info().applied()).hasSize(26);
+        assertThat(flyway.info().applied()).hasSize(27);
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,26).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,27).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(entityManager.getEntityManagerFactory().getMetamodel().getEntities())
                 .extracting(t->t.getJavaType().getName()).contains(Payment.class.getName(),PaymentAttempt.class.getName(),PaymentIdempotencyKey.class.getName());
@@ -298,7 +298,22 @@ class PaymentOrderMySqlIntegrationTest {
                 "/announcements/"+f.code()+"/bids/"+f.bid()+"/select",Map.of("final_amount",1000000),null);
         assertThat(r.status()).isEqualTo(200);assertThat(r.data().path("bid_id").asLong()).isEqualTo(f.bid());
         assertThat(r.data().path("final_amount").decimalValue()).isEqualByComparingTo("1000000");
+        assertThat(jdbc.queryForObject("SELECT progress_step FROM announcement WHERE id=?",String.class,f.announcement()))
+                .isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(create(f,"after-selection").status()).isEqualTo(201);
+    }
+
+    @Test void guestSelectionStaysAtSelectionStepAndDoesNotAuthorizeMemberPayment() throws Exception {
+        Fixture f=fixture();
+        jdbc.update("UPDATE announcement SET user_id=NULL WHERE id=?",f.announcement());
+        jdbc.update("UPDATE client_info SET user_id=NULL WHERE id=(SELECT client_info_id FROM announcement WHERE id=?)",f.announcement());
+        jdbc.update("UPDATE bids SET status='PENDING',final_amount=NULL WHERE id=?",f.bid());
+        var r=send(null,null,HttpMethod.PATCH,
+                "/announcements/guest/"+f.code()+"/bids/"+f.bid()+"/select",Map.of("final_amount",1000000),null);
+        assertThat(r.status()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT progress_step FROM announcement WHERE id=?",String.class,f.announcement()))
+                .isEqualTo("STEP_3_EXPERT_SELECTION");
+        assertThat(create(f,"guest-order").status()).isEqualTo(403);
     }
 
     @Test void simultaneousSameKeySameRequestReturnsSingleBinding() throws Exception {

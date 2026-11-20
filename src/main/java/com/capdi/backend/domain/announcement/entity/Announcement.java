@@ -94,6 +94,13 @@ public class Announcement extends BaseTimeEntity {
     @Column(name = "progress_step", nullable = false, length = 50)
     private AnnouncementProgressStepEnum progressStep = AnnouncementProgressStepEnum.STEP_1_REGISTERED;
 
+    @Column(name = "selection_round", nullable = false)
+    private long selectionRound;
+
+    public long nextSelectionRound() {
+        return ++selectionRound;
+    }
+
     public void updateStatus(AnnouncementStatusEnum newStatus) {
         this.status = newStatus;
     }

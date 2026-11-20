@@ -83,6 +83,9 @@ public enum ErrorCode {
     BID_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 입찰에 참여했습니다."),
     BID_PRICE_TOO_LOW(HttpStatus.BAD_REQUEST, "입찰 가격이 최저가보다 낮습니다."),
     BID_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 입찰입니다."),
+    SELECTION_CHANGED(HttpStatus.CONFLICT, "선정 정보가 변경되었습니다. 현재 선정 정보를 다시 조회해 주세요."),
+    SELECTION_NOT_CANCELABLE(HttpStatus.CONFLICT, "현재 진행 단계에서는 선정을 취소할 수 없습니다."),
+    SELECTION_PAYMENT_STARTED(HttpStatus.CONFLICT, "결제 시도가 시작된 선정은 취소할 수 없습니다."),
 
     // 계약/결제
     CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 계약입니다."),

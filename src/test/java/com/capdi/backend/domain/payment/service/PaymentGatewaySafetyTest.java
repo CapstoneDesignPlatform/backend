@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.*;
 class PaymentGatewaySafetyTest {
     Payment p;PaymentAttempt a;FakePaymentGateway fake;
     @BeforeEach void setup() {
-        fake=new FakePaymentGateway();p=Payment.create(1L,2L,"SYNTHETIC",3L,4L,new BigDecimal("1000"),PaymentMethod.CARD);
+        fake=new FakePaymentGateway();p=Payment.create(1L,2L,"SYNTHETIC",3L,4L,new BigDecimal("1000"),PaymentMethod.CARD, 1);
         ReflectionTestUtils.setField(p,"id",5L);a=PaymentAttempt.start(p,1,"hash",fake.identity(),Instant.parse("2026-01-01T00:00:00Z"));
         ReflectionTestUtils.setField(a,"id",6L);p.beginAttempt(6L);
     }

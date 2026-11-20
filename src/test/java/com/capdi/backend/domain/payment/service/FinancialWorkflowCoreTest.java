@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class FinancialWorkflowCoreTest {
  Payment payment(String amount){
-  var p=Payment.create(1L,2L,"synthetic",3L,4L,new BigDecimal(amount),PaymentMethod.CARD);
+  var p=Payment.create(1L,2L,"synthetic",3L,4L,new BigDecimal(amount),PaymentMethod.CARD, 1);
   ReflectionTestUtils.setField(p,"id",1L);p.beginAttempt(1L);p.recordAttempt(1L,PaymentStatus.PAID,Instant.EPOCH);return p;
  }
  @Test void defaultProviderAndSensitiveCollectionAreDisabled(){
@@ -85,7 +85,7 @@ class FinancialWorkflowCoreTest {
   o.manualReview(Instant.EPOCH.plusSeconds(100000));assertThat(o.claim(false,Instant.EPOCH.plusSeconds(100000))).isNull();
  }
  @Test void unpaidSettlementAndInvalidTaxTotalsAreRejected(){
-  var p=Payment.create(1L,2L,"synthetic",3L,4L,new BigDecimal("1000"),PaymentMethod.CARD);
+  var p=Payment.create(1L,2L,"synthetic",3L,4L,new BigDecimal("1000"),PaymentMethod.CARD, 1);
   assertThatThrownBy(()->SettlementBalance.from(p)).isInstanceOf(IllegalArgumentException.class);
   assertThatThrownBy(()->FinancialTaxInvoice.create(1L,1L,1L,2L,null,null,FinancialTaxInvoice.Taxation.FREE,LocalDate.now(),BigDecimal.TEN,BigDecimal.ONE,"0".repeat(64))).isInstanceOf(IllegalArgumentException.class);
  }

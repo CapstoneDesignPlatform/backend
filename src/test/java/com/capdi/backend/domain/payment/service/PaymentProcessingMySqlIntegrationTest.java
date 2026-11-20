@@ -120,7 +120,7 @@ class PaymentProcessingMySqlIntegrationTest {
                     .announcementCode("P57-"+UUID.randomUUID()).industry(IndustryTypeEnum.CONSTRUCTION)
                     .purpose(AnnouncementPurposeEnum.REQUIRED_LICENSE).jobType(JobTypeEnum.LICENSE)
                     .businessOwnerType(BusinessOwnerTypeEnum.CORPORATION).capital(new BigDecimal("1000000"))
-                    .status(AnnouncementStatusEnum.CLOSED).progressStep(AnnouncementProgressStepEnum.STEP_4_DIAGNOSIS_STARTED).build());
+                    .status(AnnouncementStatusEnum.CLOSED).progressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION).selectionRound(1).build());
             var b=Bid.create(a,expert,new BigDecimal("1000"));b.select(new BigDecimal("1000"));bids.saveAndFlush(b);
             return new long[]{client.getId(),expert.getId(),b.getId(),a.getId()};
         });
@@ -155,6 +155,65 @@ class PaymentProcessingMySqlIntegrationTest {
         return webhooks.receive(Map.of("X-Test-Signature",List.of("SYNTHETIC_SIGNATURE")),body);
     }
     long countAttempts(long payment){return jdbc.queryForObject("SELECT COUNT(*) FROM payment_attempts WHERE payment_id=?",Long.class,payment);}
+    String progress(Fixture f) {
+        return jdbc.queryForObject("SELECT a.progress_step FROM announcement a JOIN payments p ON p.announcement_id=a.id WHERE p.id=?",
+                String.class,f.payment());
+    }
+    void progress(Fixture f,String step) {
+        jdbc.update("UPDATE announcement SET progress_step=? WHERE id=(SELECT announcement_id FROM payments WHERE id=?)",step,f.payment());
+    }
+
+    @Test void orderAndPreparationStayAtStepThreeUntilVerifiedPayment() throws Exception {
+        Fixture f=order(PaymentMethod.CARD);
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
+        long a=ready(f);
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
+        assertThat(confirm(f,a,"start-diagnosis").data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+        assertThat(confirm(f,a,"start-diagnosis").status()).isEqualTo(200);
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"STEP_4_DIAGNOSIS_STARTED","STEP_5_ASSOCIATION_REVIEW",
+            "STEP_6_REPORT_SENT","STEP_7_COMPLETED"})
+    void repeatedPaidLookupNeverRewindsProgress(String step) throws Exception {
+        Fixture f=order(PaymentMethod.CARD);long a=ready(f);
+        assertThat(confirm(f,a,"paid").data().path("payment_status").asText()).isEqualTo("PAID");
+        progress(f,step);
+        assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo(step);
+    }
+
+    @Test void existingLegacyStepFourOrderCanStillComplete() throws Exception {
+        Fixture f=order(PaymentMethod.CARD);progress(f,"STEP_4_DIAGNOSIS_STARTED");long a=ready(f);
+        assertThat(confirm(f,a,"legacy").data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"rejected","amount","cancelled","owner","expert","multiple","step","round"})
+    void changedSelectionCannotAdvanceAnnouncement(String change) throws Exception {
+        Fixture f=order(PaymentMethod.CARD);long a=ready(f);
+        Payment p=payments.findById(f.payment()).orElseThrow();
+        switch(change) {
+            case "rejected" -> jdbc.update("UPDATE bids SET status='REJECTED' WHERE id=?",p.getBidId());
+            case "amount" -> jdbc.update("UPDATE bids SET final_amount=2000 WHERE id=?",p.getBidId());
+            case "cancelled" -> jdbc.update("UPDATE announcement SET status='CANCELLED' WHERE id=?",p.getAnnouncementId());
+            case "owner" -> jdbc.update("UPDATE announcement SET user_id=NULL WHERE id=?",p.getAnnouncementId());
+            case "expert" -> jdbc.update("UPDATE bids SET expert_user_id=? WHERE id=?",f.client(),p.getBidId());
+            case "multiple" -> new TransactionTemplate(manager).execute(tx->{
+                Bid other=Bid.create(announcements.findById(p.getAnnouncementId()).orElseThrow(),
+                        users.findById(f.expert()).orElseThrow(),new BigDecimal("1000"));
+                other.select(new BigDecimal("1000"));return bids.saveAndFlush(other);
+            });
+            case "step" -> progress(f,"STEP_2_BID_CLOSED");
+            case "round" -> jdbc.update("UPDATE announcement SET selection_round=selection_round+1 WHERE id=?",p.getAnnouncementId());
+        }
+        String before=progress(f);
+        var reply=confirm(f,a,"changed-source");
+        assertThat(reply.data().path("failure").asText()).isEqualTo("INCONSISTENT_STATE");
+        assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(progress(f)).isEqualTo(before);
+    }
 
     @Test void preparePersistsOnlyPreparedAndDoesNotPay() throws Exception {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
@@ -200,6 +259,7 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(r.data().path("payment_status").asText()).isEqualTo("UNKNOWN");
         assertThat(r.data().path("failure").asText()).isEqualTo("RESPONSE_MISMATCH");
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
     }
     @Test void duplicateProviderTransactionIsNotAssignedToTwoPayments() throws Exception {
         Fixture one=order(PaymentMethod.CARD),two=order(PaymentMethod.CARD);long a=ready(one),b=ready(two);
@@ -223,7 +283,9 @@ class PaymentProcessingMySqlIntegrationTest {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
         fake.confirmFunction=r->{fake.publish(r,PaymentGateway.State.PAID);throw new PaymentGateway.GatewayException(PaymentProcessingFailure.TIMEOUT);};
         assertThat(confirm(f,a,"timeout").data().path("payment_status").asText()).isEqualTo("UNKNOWN");
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(1);assertThat(fake.fetches).hasValue(1);
     }
     @Test void remoteSuccessThenDatabaseFailureIsRecoveredWithoutSecondConfirmation() throws Exception {
@@ -232,8 +294,10 @@ class PaymentProcessingMySqlIntegrationTest {
         Reply uncertain=confirm(f,a,"storage");
         assertThat(uncertain.data().path("failure").asText()).isEqualTo("STORAGE_FAILURE");
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         reset(payments);
         assertThat(reconcile(f,a).data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(1);
     }
     @Test void virtualAccountIssuanceNeedsActualDepositProof() throws Exception {
@@ -241,9 +305,11 @@ class PaymentProcessingMySqlIntegrationTest {
         fake.prepareFunction=r->fake.publish(r,PaymentGateway.State.WAITING_DEPOSIT);
         Reply first=prepare(f,"vbank",PaymentMethod.VIRTUAL_ACCOUNT);long a=first.data().path("attempt_id").asLong();
         assertThat(first.data().path("payment_status").asText()).isEqualTo("WAITING_DEPOSIT");
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
         fake.publish(ref(a),PaymentGateway.State.PAID);var receipt=receive(a,"deposit","CLAIMED_DEPOSIT");webhooks.process(receipt.id());
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(0);assertThat(fake.fetches).hasValue(1);
     }
     @Test void verifiedInboxIsDurableAndDuplicateEventIsIdempotent() throws Exception {
@@ -319,7 +385,7 @@ class PaymentProcessingMySqlIntegrationTest {
     }
     @Test void allEntitiesValidateAgainstV26AndCoreIsStillProviderNeutral() {
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,26).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,27).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(em.getEntityManagerFactory().getMetamodel().getEntities()).extracting(t->t.getJavaType().getName())
                 .contains(PaymentWebhookEvent.class.getName(),PaymentReconciliationJob.class.getName());
@@ -344,6 +410,7 @@ class PaymentProcessingMySqlIntegrationTest {
             assertThat(two.get(30,TimeUnit.SECONDS).status()).isEqualTo(200);
             assertThat(fake.confirms).hasValue(1);
             assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         } finally {pool.shutdownNow();}
     }
     @Test void stalePrepareCompletionCannotOverwriteReconciledPaidState() throws Exception {
@@ -419,6 +486,7 @@ class PaymentProcessingMySqlIntegrationTest {
         fake.publish(ref(a),PaymentGateway.State.PAID);((MutableClock)clock).advance(31);
         recovery.runDue();
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(progress(f)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
         assertThat(fake.confirms).hasValue(0);
         assertThat(fake.fetches.get()).isGreaterThanOrEqualTo(1);
     }
@@ -427,6 +495,7 @@ class PaymentProcessingMySqlIntegrationTest {
         Fixture f=order(PaymentMethod.CARD);long a=ready(f);
         fake.confirmFunction=r->fake.publish(r,state);
         assertThat(confirm(f,a,"terminal").data().path("payment_status").asText()).isEqualTo(state.name());
+        assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
         assertThat(prepare(f,"new",PaymentMethod.CARD).status()).isEqualTo(409);
         assertThat(fake.confirms).hasValue(1);
@@ -524,5 +593,202 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(send(null,null,HttpMethod.POST,"/payments/"+f.payment()+"/refund-requests",Map.of("amount",100),"unauth").status()).isEqualTo(401);
         assertThat(send(f.client(),UserTypeEnum.CLIENT,HttpMethod.GET,"/payments/"+f.payment()+"/attempts/"+a+"/checkout",null,null).status()).isEqualTo(503);
         assertThat(send(f.expert(),UserTypeEnum.EXPERT,HttpMethod.GET,"/payments/"+f.payment()+"/attempts/"+a+"/checkout",null,null).status()).isEqualTo(403);
+    }
+
+    record SelectionFixture(long client,long expertA,long expertB,long announcement,long bidA,long bidB,String code,boolean guest) { }
+    SelectionFixture selectionFixture(boolean guest) {
+        return new TransactionTemplate(manager).execute(tx->{
+            User client=users.saveAndFlush(User.builder().userType(UserTypeEnum.CLIENT).name("Selection Client")
+                    .email(UUID.randomUUID()+"@example.test").phone("01000000000").build());
+            var info=clients.saveAndFlush(ClientInfo.builder().user(guest?null:client).representativeName("Selection Client")
+                    .contact("01000000000").email("selection@example.test").companyName("Synthetic Company")
+                    .businessNumber("1234567891").address("Synthetic Address").build());
+            User expertA=users.saveAndFlush(User.builder().userType(UserTypeEnum.EXPERT).name("Expert A")
+                    .email(UUID.randomUUID()+"@example.test").phone("01000000000").build());
+            User expertB=users.saveAndFlush(User.builder().userType(UserTypeEnum.EXPERT).name("Expert B")
+                    .email(UUID.randomUUID()+"@example.test").phone("01000000000").build());
+            for(User expert:List.of(expertA,expertB)) {
+                var profile=ExpertProfile.createDefault(expert,"Synthetic Company");
+                profile.updateVerificationStatus(VerificationStatusEnum.APPROVED,null);profiles.saveAndFlush(profile);
+            }
+            var announcement=announcements.saveAndFlush(Announcement.builder().user(guest?null:client).clientInfo(info)
+                    .announcementCode("CANCEL-"+UUID.randomUUID()).industry(IndustryTypeEnum.CONSTRUCTION)
+                    .purpose(AnnouncementPurposeEnum.REQUIRED_LICENSE).jobType(JobTypeEnum.LICENSE)
+                    .businessOwnerType(BusinessOwnerTypeEnum.CORPORATION).capital(new BigDecimal("1000000"))
+                    .status(AnnouncementStatusEnum.CLOSED).progressStep(AnnouncementProgressStepEnum.STEP_3_EXPERT_SELECTION).build());
+            var a=bids.saveAndFlush(Bid.create(announcement,expertA,new BigDecimal("1100")));
+            var b=bids.saveAndFlush(Bid.create(announcement,expertB,new BigDecimal("1200")));
+            return new SelectionFixture(client.getId(),expertA.getId(),expertB.getId(),announcement.getId(),a.getId(),b.getId(),
+                    announcement.getAnnouncementCode(),guest);
+        });
+    }
+    String selectionRoute(SelectionFixture f,long bid,String action) {
+        return "/announcements/"+(f.guest()?"guest/":"")+f.code()+"/bids/"+bid+"/"+action;
+    }
+    Reply select(SelectionFixture f,long bid,int amount) throws Exception {
+        return send(f.guest()?null:f.client(),f.guest()?null:UserTypeEnum.CLIENT,HttpMethod.PATCH,
+                selectionRoute(f,bid,"select"),Map.of("final_amount",amount),null);
+    }
+    Reply cancel(SelectionFixture f,long bid,long round) throws Exception {
+        return send(f.guest()?null:f.client(),f.guest()?null:UserTypeEnum.CLIENT,HttpMethod.PATCH,
+                selectionRoute(f,bid,"cancel-selection"),Map.of("selection_round",round,"reason","Changed expert"),null);
+    }
+    Reply selectionOrder(SelectionFixture f,long bid,String key) throws Exception {
+        return send(f.client(),UserTypeEnum.CLIENT,HttpMethod.POST,"/announcements/"+f.code()+"/payments",
+                Map.of("bid_id",bid,"method","CARD"),key);
+    }
+    String bidStatus(long bid) {return jdbc.queryForObject("SELECT status FROM bids WHERE id=?",String.class,bid);}
+    int selectedCount(long user) {return jdbc.queryForObject("SELECT selected_count FROM expert_profiles WHERE user_id=?",Integer.class,user);}
+    long historyCount(SelectionFixture f) {return jdbc.queryForObject("SELECT COUNT(*) FROM bid_selection_history WHERE announcement_id=?",Long.class,f.announcement());}
+
+    @ParameterizedTest @ValueSource(booleans={false,true})
+    void memberAndGuestCanCancelAndReselectAnotherExpert(boolean guest) throws Exception {
+        var f=selectionFixture(guest);
+        var selected=select(f,f.bidA(),1000);
+        assertThat(selected.status()).isEqualTo(200);assertThat(selected.data().path("selection_round").asLong()).isEqualTo(1);
+        assertThat(bidStatus(f.bidB())).isEqualTo("REJECTED");assertThat(selectedCount(f.expertA())).isEqualTo(1);
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(200);
+        assertThat(bidStatus(f.bidA())).isEqualTo("PENDING");assertThat(bidStatus(f.bidB())).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT final_amount FROM bids WHERE id=?",BigDecimal.class,f.bidA())).isNull();
+        assertThat(jdbc.queryForObject("SELECT bid_amount FROM bids WHERE id=?",BigDecimal.class,f.bidA())).isEqualByComparingTo("1100");
+        assertThat(selectedCount(f.expertA())).isZero();
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(200);assertThat(selectedCount(f.expertA())).isZero();
+        assertThat(historyCount(f)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT cancel_reason FROM bid_selection_history WHERE announcement_id=?",String.class,f.announcement()))
+                .isEqualTo("Changed expert");
+        assertThat(jdbc.queryForObject("SELECT cancelled_by FROM bid_selection_history WHERE announcement_id=?",Long.class,f.announcement()))
+                .isEqualTo(guest?null:f.client());
+        var next=select(f,f.bidB(),1200);assertThat(next.status()).isEqualTo(200);
+        assertThat(next.data().path("selection_round").asLong()).isEqualTo(2);
+        assertThat(bidStatus(f.bidA())).isEqualTo("REJECTED");assertThat(bidStatus(f.bidB())).isEqualTo("SELECTED");
+        assertThat(selectedCount(f.expertB())).isEqualTo(1);assertThat(historyCount(f)).isEqualTo(2);
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(409);
+        assertThat(bidStatus(f.bidB())).isEqualTo("SELECTED");
+    }
+
+    @Test void reselectingSameExpertCreatesNewOrderAndCannotReviveOldOrderOrCancellation() throws Exception {
+        var f=selectionFixture(false);assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        var first=selectionOrder(f,f.bidA(),"round-one");assertThat(first.status()).isEqualTo(201);
+        long oldPayment=first.data().path("payment_id").asLong();
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(200);
+        assertThat(payments.findById(oldPayment).orElseThrow().getStatus()).isEqualTo(PaymentStatus.CANCELED);
+        assertThat(select(f,f.bidB(),1200).data().path("selection_round").asLong()).isEqualTo(2);
+        assertThat(cancel(f,f.bidB(),2).status()).isEqualTo(200);
+        assertThat(select(f,f.bidA(),2000).data().path("selection_round").asLong()).isEqualTo(3);
+        var next=selectionOrder(f,f.bidA(),"round-three");assertThat(next.status()).isEqualTo(201);
+        long payment=next.data().path("payment_id").asLong();assertThat(payment).isNotEqualTo(oldPayment);
+        assertThat(next.data().path("selection_round").asLong()).isEqualTo(3);
+        assertThat(next.data().path("amount").decimalValue()).isEqualByComparingTo("2000");
+        var replay=selectionOrder(f,f.bidA(),"round-one");assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.data().path("payment_id").asLong()).isEqualTo(oldPayment);
+        assertThat(replay.data().path("status").asText()).isEqualTo("CANCELED");
+        assertThat(prepare(new Fixture(f.client(),f.expertA(),oldPayment),"stale",PaymentMethod.CARD).status()).isEqualTo(409);
+        assertThat(fake.prepares).hasValue(0);assertThat(countAttempts(oldPayment)).isZero();
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(409);
+        assertThat(bidStatus(f.bidA())).isEqualTo("SELECTED");assertThat(selectedCount(f.expertA())).isEqualTo(1);
+        var current=new Fixture(f.client(),f.expertA(),payment);long a=ready(current);
+        assertThat(confirm(current,a,"new-round-payment").data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(progress(current)).isEqualTo("STEP_4_DIAGNOSIS_STARTED");
+        assertThat(cancel(f,f.bidA(),3).status()).isEqualTo(409);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payments WHERE bid_id=?",Long.class,f.bidA())).isEqualTo(2);
+    }
+
+    @Test void cancellationDoesNotRestoreRejectionsOutsideItsRound() throws Exception {
+        var f=selectionFixture(false);
+        // This bid was independently rejected before selection, so it has no rejection round.
+        jdbc.update("UPDATE bids SET status='REJECTED' WHERE id=?",f.bidB());
+        assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(200);
+        assertThat(bidStatus(f.bidA())).isEqualTo("PENDING");assertThat(bidStatus(f.bidB())).isEqualTo("REJECTED");
+    }
+
+    @Test void cancellationChecksRoleOwnershipTargetAndRound() throws Exception {
+        var f=selectionFixture(false);var other=selectionFixture(false);var guest=selectionFixture(true);
+        assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        assertThat(select(guest,guest.bidA(),1000).status()).isEqualTo(200);
+        String route=selectionRoute(f,f.bidA(),"cancel-selection");var body=Map.of("selection_round",1,"reason","Changed expert");
+        assertThat(send(null,null,HttpMethod.PATCH,route,body,null).status()).isEqualTo(401);
+        assertThat(send(f.expertA(),UserTypeEnum.EXPERT,HttpMethod.PATCH,route,body,null).status()).isEqualTo(403);
+        assertThat(send(f.expertA(),UserTypeEnum.CLIENT,HttpMethod.PATCH,route,body,null).status()).isEqualTo(403);
+        assertThat(send(other.client(),UserTypeEnum.CLIENT,HttpMethod.PATCH,route,body,null).status()).isEqualTo(403);
+        assertThat(cancel(f,f.bidB(),1).status()).isEqualTo(409);
+        assertThat(cancel(f,other.bidA(),1).status()).isEqualTo(404);
+        assertThat(cancel(f,f.bidA(),99).status()).isEqualTo(409);
+        assertThat(send(null,null,HttpMethod.PATCH,"/announcements/guest/"+f.code()+"/bids/"+f.bidA()+"/cancel-selection",body,null).status()).isEqualTo(403);
+        assertThat(send(f.client(),UserTypeEnum.CLIENT,HttpMethod.PATCH,"/announcements/"+guest.code()+"/bids/"+guest.bidA()+"/cancel-selection",body,null).status()).isEqualTo(403);
+        for(Object invalid:List.of(Map.of("reason","missing round"),Map.of("selection_round",0,"reason","zero round"),
+                Map.of("selection_round",1,"reason"," "),Map.of("selection_round",1,"reason","x".repeat(501)))) {
+            assertThat(send(f.client(),UserTypeEnum.CLIENT,HttpMethod.PATCH,route,invalid,null).status()).isEqualTo(400);
+        }
+        assertThat(bidStatus(f.bidA())).isEqualTo("SELECTED");assertThat(selectedCount(f.expertA())).isEqualTo(1);
+    }
+
+    @ParameterizedTest @EnumSource(PaymentStatus.class)
+    void anyExistingPaymentAttemptBlocksSelectionCancellationEvenIfStatusLooksUnpaid(PaymentStatus status) throws Exception {
+        var f=selectionFixture(false);assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        long payment=selectionOrder(f,f.bidA(),"order").data().path("payment_id").asLong();
+        var paidFixture=new Fixture(f.client(),f.expertA(),payment);ready(paidFixture);
+        jdbc.update("UPDATE payments SET status=? WHERE id=?",status.name(),payment);
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(409);
+        assertThat(bidStatus(f.bidA())).isEqualTo("SELECTED");assertThat(bidStatus(f.bidB())).isEqualTo("REJECTED");
+        assertThat(selectedCount(f.expertA())).isEqualTo(1);
+        assertThat(payments.findById(payment).orElseThrow().getStatus()).isEqualTo(status);
+    }
+
+    @Test void selectionCancellationAndPaymentPreparationCannotBothSucceed() throws Exception {
+        var f=selectionFixture(false);assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        long payment=selectionOrder(f,f.bidA(),"order").data().path("payment_id").asLong();
+        var order=new Fixture(f.client(),f.expertA(),payment);var pool=Executors.newFixedThreadPool(2);var start=new CyclicBarrier(2);
+        try {
+            var cancellation=pool.submit(()->{start.await(10,TimeUnit.SECONDS);return cancel(f,f.bidA(),1);});
+            var preparation=pool.submit(()->{start.await(10,TimeUnit.SECONDS);return prepare(order,"race",PaymentMethod.CARD);});
+            int cancelled=cancellation.get(30,TimeUnit.SECONDS).status(),prepared=preparation.get(30,TimeUnit.SECONDS).status();
+            assertThat(List.of(cancelled,prepared)).containsExactlyInAnyOrder(200,409);
+            if(cancelled==200) {
+                assertThat(bidStatus(f.bidA())).isEqualTo("PENDING");assertThat(countAttempts(payment)).isZero();
+                assertThat(payments.findById(payment).orElseThrow().getStatus()).isEqualTo(PaymentStatus.CANCELED);
+                assertThat(fake.prepares).hasValue(0);
+            } else {
+                assertThat(bidStatus(f.bidA())).isEqualTo("SELECTED");assertThat(countAttempts(payment)).isEqualTo(1);
+                assertThat(payments.findById(payment).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PROCESSING);
+            }
+        } finally {pool.shutdownNow();}
+    }
+
+    @Test void orderCreationAndCancellationRaceNeverLeavesPayableCanceledSelection() throws Exception {
+        var f=selectionFixture(false);assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        var pool=Executors.newFixedThreadPool(2);var start=new CyclicBarrier(2);
+        try {
+            var cancellation=pool.submit(()->{start.await(10,TimeUnit.SECONDS);return cancel(f,f.bidA(),1);});
+            var creation=pool.submit(()->{start.await(10,TimeUnit.SECONDS);return selectionOrder(f,f.bidA(),"race");});
+            assertThat(cancellation.get(30,TimeUnit.SECONDS).status()).isEqualTo(200);
+            assertThat(creation.get(30,TimeUnit.SECONDS).status()).isIn(201,409);
+            assertThat(bidStatus(f.bidA())).isEqualTo("PENDING");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payments WHERE announcement_id=? AND status<>'CANCELED'",Long.class,f.announcement())).isZero();
+        } finally {pool.shutdownNow();}
+    }
+
+    @Test void simultaneousDuplicateCancellationsDecrementOnlyOnce() throws Exception {
+        var f=selectionFixture(false);assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        var pool=Executors.newFixedThreadPool(2);var start=new CyclicBarrier(2);
+        try {
+            var first=pool.submit(()->{start.await(10,TimeUnit.SECONDS);return cancel(f,f.bidA(),1);});
+            var second=pool.submit(()->{start.await(10,TimeUnit.SECONDS);return cancel(f,f.bidA(),1);});
+            assertThat(first.get(30,TimeUnit.SECONDS).status()).isEqualTo(200);
+            assertThat(second.get(30,TimeUnit.SECONDS).status()).isEqualTo(200);
+            assertThat(selectedCount(f.expertA())).isZero();assertThat(historyCount(f)).isEqualTo(1);
+        } finally {pool.shutdownNow();}
+    }
+
+    @Test void cancellationRollsBackPaymentBidsCountsAndHistoryTogether() throws Exception {
+        var f=selectionFixture(false);assertThat(select(f,f.bidA(),1000).status()).isEqualTo(200);
+        long payment=selectionOrder(f,f.bidA(),"order").data().path("payment_id").asLong();
+        doThrow(new IllegalStateException("SYNTHETIC_CANCEL_STORAGE_FAILURE")).when(payments).flush();
+        try {assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(500);} finally {reset(payments);}
+        assertThat(payments.findById(payment).orElseThrow().getStatus()).isEqualTo(PaymentStatus.CREATED);
+        assertThat(bidStatus(f.bidA())).isEqualTo("SELECTED");assertThat(bidStatus(f.bidB())).isEqualTo("REJECTED");
+        assertThat(selectedCount(f.expertA())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bid_selection_history WHERE announcement_id=? AND cancelled_at IS NOT NULL",Long.class,f.announcement())).isZero();
+        assertThat(cancel(f,f.bidA(),1).status()).isEqualTo(200);
     }
 }

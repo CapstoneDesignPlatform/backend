@@ -38,6 +38,9 @@ class PaymentControllerTest {
     static class Config {
         @Bean PaymentOrderService paymentOrderService(){return mock(PaymentOrderService.class);}
         @Bean BidService bidService(){return mock(BidService.class);}
+        @Bean com.capdi.backend.domain.bid.service.SelectionCancellationService cancellationService(){
+            return mock(com.capdi.backend.domain.bid.service.SelectionCancellationService.class);
+        }
         @Bean JwtUtil jwtUtil(){return new JwtUtil(UUID.randomUUID()+"-payment-test-only",60000);}
         @Bean ObjectMapper mapper(){return new ObjectMapper().findAndRegisterModules();}
     }
@@ -61,7 +64,7 @@ class PaymentControllerTest {
     }
     PaymentResponse response() {
         return PaymentResponse.builder().paymentId(10L).orderId("pay_synthetic").announcementCode("SYNTHETIC-57")
-                .bidId(20L).amount(new BigDecimal("1000000")).currency("KRW").status(PaymentStatus.CREATED)
+                .bidId(20L).selectionRound(1).amount(new BigDecimal("1000000")).currency("KRW").status(PaymentStatus.CREATED)
                 .createdAt(LocalDateTime.of(2026,1,1,0,0)).build();
     }
     @Test void creates201AndReplays200WithExactResponseContract() throws Exception {
@@ -72,7 +75,8 @@ class PaymentControllerTest {
         assertThat(first.getStatus()).isEqualTo(201);
         var data=new ObjectMapper().readTree(first.getContentAsString()).path("data");
         assertThat(data.properties()).extracting(java.util.Map.Entry::getKey)
-                .containsExactlyInAnyOrder("payment_id","order_id","announcement_code","bid_id","amount","currency","status","created_at");
+                .containsExactlyInAnyOrder("payment_id","order_id","announcement_code","bid_id","selection_round","amount","currency","status","created_at");
+        assertThat(data.path("selection_round").asLong()).isEqualTo(1);
         assertThat(data.path("amount").decimalValue()).isEqualByComparingTo("1000000");
         assertThat(mvc.perform(create(UserTypeEnum.CLIENT,"{\"bid_id\":20,\"method\":\"CARD\"}")).andReturn().getResponse().getStatus()).isEqualTo(200);
     }
