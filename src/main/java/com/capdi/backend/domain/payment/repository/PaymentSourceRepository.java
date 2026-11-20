@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-/** Scalar locking reads bypass OSIV's managed entity cache. No source domain is modified. */
+/** Scalar locking reads bypass OSIV's managed entity cache. */
 @Repository
 @RequiredArgsConstructor
 public class PaymentSourceRepository {
@@ -19,10 +19,10 @@ public class PaymentSourceRepository {
     }
 
     public Optional<AnnouncementSnapshot> lockAnnouncement(String code) {
-        return jdbc.query("SELECT id, user_id, status, progress_step FROM announcement " +
+        return jdbc.query("SELECT id, user_id, status, progress_step, selection_round FROM announcement " +
                         "WHERE announcement_code = ? FOR UPDATE",
                 (rs, row) -> new AnnouncementSnapshot(rs.getLong("id"), rs.getObject("user_id", Long.class),
-                        rs.getString("status"), rs.getString("progress_step")), code).stream().findFirst();
+                        rs.getString("status"), rs.getString("progress_step"), rs.getLong("selection_round")), code).stream().findFirst();
     }
 
     public Optional<BidSnapshot> lockBid(Long id, String code) {
@@ -42,6 +42,13 @@ public class PaymentSourceRepository {
                 (rs, row) -> rs.getLong(1), expertUserId).stream().findFirst();
     }
 
-    public record AnnouncementSnapshot(Long id, Long ownerId, String status, String progressStep) { }
+    /** Caller holds the announcement lock; participates in the payment completion transaction. */
+    public int startDiagnosisAfterPayment(Long announcementId) {
+        return jdbc.update("UPDATE announcement SET progress_step = 'STEP_4_DIAGNOSIS_STARTED', " +
+                        "updated_at = CURRENT_TIMESTAMP(6) WHERE id = ? AND status = 'CLOSED' " +
+                        "AND progress_step = 'STEP_3_EXPERT_SELECTION'", announcementId);
+    }
+
+    public record AnnouncementSnapshot(Long id, Long ownerId, String status, String progressStep, long selectionRound) { }
     public record BidSnapshot(Long id, Long expertUserId, String status, BigDecimal finalAmount) { }
 }

@@ -56,6 +56,9 @@ public class ClientAnnouncementListResponse {
         @JsonProperty("progress_step")
         private int progressStep;
 
+        @JsonProperty("selection_round")
+        private long selectionRound;
+
         @JsonProperty("progress_step_label")
         private String progressStepLabel;
 
@@ -86,6 +89,7 @@ public class ClientAnnouncementListResponse {
                     .capital(announcement.getCapital())
                     .status(announcement.getStatus().name())
                     .progressStep(step.getStepNumber())
+                    .selectionRound(announcement.getSelectionRound())
                     .progressStepLabel(step.getLabel())
                     .bids(bidDtos)
                     .build();

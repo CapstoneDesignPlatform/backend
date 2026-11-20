@@ -31,12 +31,12 @@ class PaymentOrderServiceTest {
         sources = mock(PaymentSourceRepository.class); service = new PaymentOrderService(payments, keys, sources);
         when(sources.userType(1L, true)).thenReturn(Optional.of("CLIENT"));
         when(sources.userType(1L, false)).thenReturn(Optional.of("CLIENT"));
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED","STEP_4_DIAGNOSIS_STARTED")));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED","STEP_3_EXPERT_SELECTION", 1)));
         when(sources.lockBid(10L,CODE)).thenReturn(Optional.of(new BidSnapshot(10L,3L,"SELECTED",new BigDecimal("1000000.00"))));
         when(sources.lockSelectedBidIds(CODE)).thenReturn(List.of(10L));
         when(sources.expertProfileId(3L)).thenReturn(Optional.of(4L));
         when(keys.findForUpdate(anyLong(), anyString())).thenReturn(Optional.empty());
-        when(payments.findByBidIdForUpdate(10L)).thenReturn(Optional.empty());
+        when(payments.findByBidIdAndSelectionRoundForUpdate(10L,1L)).thenReturn(Optional.empty());
         when(payments.saveAndFlush(any())).thenAnswer(call -> {
             Payment p=call.getArgument(0);ReflectionTestUtils.setField(p,"id",100L);
             ReflectionTestUtils.setField(p,"createdAt",java.time.LocalDateTime.of(2026,1,1,0,0));return p;
@@ -46,7 +46,7 @@ class PaymentOrderServiceTest {
         return new ObjectMapper().readValue("{\"bid_id\":"+bid+",\"method\":\""+method+"\"}",PaymentOrderRequest.class);
     }
     Payment existing() {
-        Payment p=Payment.create(10L,2L,CODE,1L,4L,new BigDecimal("1000000"),PaymentMethod.CARD);
+        Payment p=Payment.create(10L,2L,CODE,1L,4L,new BigDecimal("1000000"),PaymentMethod.CARD, 1);
         ReflectionTestUtils.setField(p,"id",100L);return p;
     }
     void expect(ErrorCode code, org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
@@ -81,16 +81,17 @@ class PaymentOrderServiceTest {
     }
     @ParameterizedTest @ValueSource(strings={"ACTIVE","CANCELLED"})
     void rejectsNonClosedAnnouncement(String state) throws Exception {
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,state,"STEP_4_DIAGNOSIS_STARTED")));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,state,"STEP_3_EXPERT_SELECTION", 1)));
         expect(ErrorCode.PAYMENT_NOT_ELIGIBLE,()->service.create(1L,CODE,KEY,request(10,"CARD")));
     }
-    @ParameterizedTest @ValueSource(strings={"STEP_1_REGISTERED","STEP_3_EXPERT_SELECTION","UNKNOWN"})
+    @ParameterizedTest @ValueSource(strings={"STEP_1_REGISTERED","STEP_2_BID_CLOSED","STEP_4_DIAGNOSIS_STARTED",
+            "STEP_5_ASSOCIATION_REVIEW","STEP_6_REPORT_SENT","STEP_7_COMPLETED","UNKNOWN"})
     void rejectsUnselectedStep(String step) throws Exception {
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED",step)));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,1L,"CLOSED",step, 1)));
         expect(ErrorCode.PAYMENT_NOT_ELIGIBLE,()->service.create(1L,CODE,KEY,request(10,"CARD")));
     }
     @Test void rejectsOtherOwner() throws Exception {
-        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,99L,"CLOSED","STEP_4_DIAGNOSIS_STARTED")));
+        when(sources.lockAnnouncement(CODE)).thenReturn(Optional.of(new AnnouncementSnapshot(2L,99L,"CLOSED","STEP_3_EXPERT_SELECTION", 1)));
         expect(ErrorCode.ANNOUNCEMENT_FORBIDDEN,()->service.create(1L,CODE,KEY,request(10,"CARD")));
     }
     @Test void rejectsMissingAnnouncement() throws Exception {
@@ -127,16 +128,16 @@ class PaymentOrderServiceTest {
         verify(payments,never()).saveAndFlush(any());
     }
     @Test void differentKeySameBidAndMethodReturnsExistingAndBindsAlias() throws Exception {
-        when(payments.findByBidIdForUpdate(10L)).thenReturn(Optional.of(existing()));
+        when(payments.findByBidIdAndSelectionRoundForUpdate(10L,1L)).thenReturn(Optional.of(existing()));
         var r=service.create(1L,CODE,"other-key",request(10,"CARD"));assertThat(r.created()).isFalse();
         verify(keys).saveAndFlush(any());verify(payments,never()).saveAndFlush(any());
     }
     @Test void differentKeySameBidDifferentMethodConflicts() throws Exception {
-        when(payments.findByBidIdForUpdate(10L)).thenReturn(Optional.of(existing()));
+        when(payments.findByBidIdAndSelectionRoundForUpdate(10L,1L)).thenReturn(Optional.of(existing()));
         expect(ErrorCode.PAYMENT_ORDER_CONFLICT,()->service.create(1L,CODE,"other-key",request(10,"TRANSFER")));
     }
     @Test void changedSourceDoesNotOverwriteExistingSnapshot() throws Exception {
-        Payment p=existing();when(payments.findByBidIdForUpdate(10L)).thenReturn(Optional.of(p));
+        Payment p=existing();when(payments.findByBidIdAndSelectionRoundForUpdate(10L,1L)).thenReturn(Optional.of(p));
         when(sources.lockBid(10L,CODE)).thenReturn(Optional.of(new BidSnapshot(10L,3L,"SELECTED",new BigDecimal("2000000"))));
         expect(ErrorCode.PAYMENT_ORDER_CONFLICT,()->service.create(1L,CODE,"new-key",request(10,"CARD")));
         assertThat(p.getAmount()).isEqualByComparingTo("1000000");

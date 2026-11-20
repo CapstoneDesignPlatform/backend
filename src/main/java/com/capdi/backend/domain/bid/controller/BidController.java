@@ -2,10 +2,14 @@ package com.capdi.backend.domain.bid.controller;
 
 import com.capdi.backend.domain.bid.dto.BidCreateRequest;
 import com.capdi.backend.domain.bid.dto.BidResponse;
+import com.capdi.backend.domain.bid.dto.BidUpdateRequest;
 import com.capdi.backend.domain.bid.dto.ExpertSelectRequest;
 import com.capdi.backend.domain.bid.dto.ExpertSelectResponse;
 import com.capdi.backend.domain.bid.dto.MyBidResponse;
 import com.capdi.backend.domain.bid.service.BidService;
+import com.capdi.backend.domain.bid.service.SelectionCancellationService;
+import com.capdi.backend.domain.bid.dto.SelectionCancelRequest;
+import com.capdi.backend.domain.bid.dto.SelectionCancelResponse;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
 import com.capdi.backend.global.response.PageResponse;
@@ -29,6 +33,27 @@ import org.springframework.web.bind.annotation.RestController;
 public class BidController {
 
     private final BidService bidService;
+    private final SelectionCancellationService cancellationService;
+
+    @PatchMapping("/announcements/{announcementCode}/bids/{bidId}/cancel-selection")
+    @PreAuthorize("hasRole('CLIENT')")
+    @Operation(summary = "전문가 선정 취소", description = "결제 시도 전의 선정을 취소하고 해당 회차의 입찰을 복구합니다.")
+    public ResponseEntity<ApiResponse<SelectionCancelResponse>> cancelSelection(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String announcementCode, @PathVariable Long bidId,
+            @RequestBody @Valid SelectionCancelRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("전문가 선정이 취소되었습니다.",
+                cancellationService.cancel(userDetails.getUserId(),announcementCode,bidId,request)));
+    }
+
+    @PatchMapping("/announcements/guest/{announcementCode}/bids/{bidId}/cancel-selection")
+    @Operation(summary = "비회원 전문가 선정 취소")
+    public ResponseEntity<ApiResponse<SelectionCancelResponse>> cancelGuestSelection(
+            @PathVariable String announcementCode, @PathVariable Long bidId,
+            @RequestBody @Valid SelectionCancelRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("전문가 선정이 취소되었습니다.",
+                cancellationService.cancelGuest(announcementCode,bidId,request)));
+    }
 
     @GetMapping("/expert/me/bids")
     public ResponseEntity<ApiResponse<PageResponse<MyBidResponse>>> getMyBids(
@@ -64,6 +89,18 @@ public class BidController {
             @RequestBody @Valid ExpertSelectRequest request) {
         ExpertSelectResponse response = bidService.selectGuestExpert(announcementCode, bidId, request);
         return ResponseEntity.ok(ApiResponse.ok("전문가가 선택되었습니다.", response));
+    }
+
+    @PatchMapping("/expert/job-posts/{announcementCode}/bids")
+    @PreAuthorize("hasRole('EXPERT')")
+    @Operation(summary = "본인 입찰 금액 수정", description = "승인된 전문가가 마감 전 공고의 본인 대기 중 입찰 금액을 수정합니다.")
+    public ResponseEntity<ApiResponse<BidResponse>> updateBid(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String announcementCode,
+            @RequestBody @Valid BidUpdateRequest request
+    ) {
+        BidResponse response = bidService.updateBid(userDetails.getUserId(), announcementCode, request);
+        return ResponseEntity.ok(ApiResponse.ok("입찰 금액이 수정되었습니다.", response));
     }
 
     @PostMapping("/expert/job-posts/{announcementCode}/bids")
