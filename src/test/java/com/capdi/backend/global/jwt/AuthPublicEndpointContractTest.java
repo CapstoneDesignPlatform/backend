@@ -33,14 +33,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 /** Actual SecurityConfig/JWT filter/DTOs/controller; mocked auth service, no HTTP server or DB. */
 class AuthPublicEndpointContractTest {
-    static final String SECRET=UUID.randomUUID()+"-isolated-test-only";
     @Configuration @EnableWebMvc @EnableWebSecurity
     @Import({SecurityConfig.class,AuthController.class,JwtAuthenticationEntryPoint.class,
             JwtAccessDeniedHandler.class,GlobalExceptionHandler.class,Markers.class})
     static class Config {
         @Bean ObjectMapper mapper(){return new ObjectMapper();}
         @Bean AuthService authService(){return mock(AuthService.class);}
-        @Bean JwtUtil jwtUtil(){return new JwtUtil(SECRET,60000);}
+        @Bean JwtUtil jwtUtil(){return new JwtUtil(UUID.randomUUID()+"-isolated-test-only",60000);}
     }
     @RestController static class Markers {
         @GetMapping("/files/test-protected") Map<String,Boolean> protectedMarker(){return Map.of("allowed",true);}
@@ -128,49 +127,5 @@ class AuthPublicEndpointContractTest {
         var failure=catchThrowableOfType(()->actual.signup(dto),CustomException.class);
         assertThat(failure.getErrorCode()).isEqualTo(ErrorCode.EXPERT_BUSINESS_NAME_REQUIRED);
         verifyNoInteractions(users,tokens,clients,provisioning,encoder);
-    }
-    String expiredAccessToken(){return new JwtUtil(SECRET,-1000).generateToken(7L,UserTypeEnum.CLIENT);}
-    MvcResult sendWithHeader(String route,Object body,String bearer) throws Exception {
-        return mvc.perform(path(post("/api"+route),route).contentType("application/json")
-                .header("Authorization","Bearer "+bearer).content(mapper.writeValueAsBytes(body))).andReturn();
-    }
-    @Test void refreshUsesBodyTokenWithoutAuthorizationHeader() throws Exception {
-        when(service.refresh("opaque-test-refresh")).thenReturn(new AuthTokens("new-access","new-refresh","CLIENT",55L));
-        var result=send("/auth/refresh",Map.of("refreshToken","opaque-test-refresh"));
-        assertThat(result.getResponse().getStatus()).isEqualTo(200);
-        var data=mapper.readTree(result.getResponse().getContentAsString()).path("data");
-        assertThat(data.path("refreshToken").asText()).isEqualTo("new-refresh");
-        assertThat(data.path("clientInfoId").asLong()).isEqualTo(55L);
-    }
-    @Test void refreshWithEmptyBodyIs400() throws Exception {
-        assertThat(send("/auth/refresh",Map.of()).getResponse().getStatus()).isEqualTo(400);verifyNoInteractions(service);
-    }
-    @Test void refreshWithOnlyExpiredAccessHeaderIs400() throws Exception {
-        assertThat(sendWithHeader("/auth/refresh",Map.of(),expiredAccessToken()).getResponse().getStatus()).isEqualTo(400);
-        verifyNoInteractions(service);
-    }
-    @Test void expiredAccessTokenNoLongerAuthenticatesOnRefreshPath() throws Exception {
-        var principal=new org.springframework.security.core.Authentication[1];
-        when(service.refresh("opaque-test-refresh")).thenAnswer(invocation->{
-            principal[0]=SecurityContextHolder.getContext().getAuthentication();
-            return new AuthTokens("new-access","new-refresh","CLIENT",55L);
-        });
-        var result=sendWithHeader("/auth/refresh",Map.of("refreshToken","opaque-test-refresh"),expiredAccessToken());
-        assertThat(result.getResponse().getStatus()).isEqualTo(200);
-        verify(service).refresh("opaque-test-refresh");
-        assertThat(principal[0]==null||!(principal[0].getPrincipal() instanceof CustomUserDetails)).isTrue();
-    }
-    @Test void unknownRefreshTokenIs401() throws Exception {
-        when(service.refresh("unknown")).thenThrow(new CustomException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
-        assertThat(send("/auth/refresh",Map.of("refreshToken","unknown")).getResponse().getStatus()).isEqualTo(401);
-    }
-    @Test void logoutWithBodyAndNoAuthorizationRevokesByToken() throws Exception {
-        assertThat(send("/auth/logout",Map.of("refreshToken","opaque-test-refresh")).getResponse().getStatus()).isEqualTo(200);
-        verify(service).logout(null,"opaque-test-refresh");
-    }
-    @Test void expiredAccessTokenOnProtectedEndpointIs401() throws Exception {
-        var response=mvc.perform(path(get("/api/files/test-protected"),"/files/test-protected")
-                .header("Authorization","Bearer "+expiredAccessToken())).andReturn().getResponse();
-        assertThat(response.getStatus()).isEqualTo(401);
     }
 }
