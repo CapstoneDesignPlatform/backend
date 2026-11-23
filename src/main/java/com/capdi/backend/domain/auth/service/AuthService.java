@@ -77,9 +77,52 @@ public class AuthService {
             throw new CustomException(ErrorCode.INVALID_PASSWORD);
         }
 
-        refreshTokenRepository.deleteByUserId(user.getId());
+        return issueTokens(user, createAndSaveRefreshToken(user.getId()));
+    }
+
+    /**
+     * 클라이언트가 보낸 refresh 토큰 원문을 검증하고 새 토큰으로 교체한다.
+     * 교체는 조건부 UPDATE로 원자적으로 처리되어, 같은 토큰으로 동시에 요청하면 하나만 성공한다.
+     */
+    @Transactional
+    public AuthTokens refresh(String rawRefreshToken) {
+        LocalDateTime now = LocalDateTime.now();
+        String oldHash = RefreshTokenHasher.sha256Hex(rawRefreshToken);
+
+        RefreshToken stored = refreshTokenRepository.findByTokenHash(oldHash)
+                .orElseThrow(() -> new CustomException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+
+        if (!stored.getExpiresAt().isAfter(now)) {
+            refreshTokenRepository.delete(stored);
+            throw new CustomException(ErrorCode.REFRESH_TOKEN_EXPIRED);
+        }
+
+        User user = userRepository.findById(stored.getUserId())
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        String newRawToken = RefreshTokenHasher.newRawToken();
+        int rotated = refreshTokenRepository.rotate(
+                oldHash, RefreshTokenHasher.sha256Hex(newRawToken), refreshExpiresAt(now), now);
+        if (rotated != 1) {
+            throw new CustomException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+        }
+
+        return issueTokens(user, newRawToken);
+    }
+
+    /** refresh 토큰이 있으면 그 토큰을, 인증된 사용자가 있으면 그 사용자의 토큰을 폐기한다. */
+    @Transactional
+    public void logout(Long userId, String rawRefreshToken) {
+        if (StringUtils.hasText(rawRefreshToken)) {
+            refreshTokenRepository.deleteByTokenHash(RefreshTokenHasher.sha256Hex(rawRefreshToken));
+        }
+        if (userId != null) {
+            refreshTokenRepository.deleteByUserId(userId);
+        }
+    }
+
+    private AuthTokens issueTokens(User user, String rawRefreshToken) {
         String accessToken = jwtUtil.generateToken(user.getId(), user.getUserType());
-        String refreshToken = createAndSaveRefreshToken(user.getId());
 
         Long clientInfoId = null;
         if (user.getUserType() == UserTypeEnum.CLIENT) {
@@ -88,40 +131,17 @@ public class AuthService {
                     .orElse(null);
         }
 
-        return new AuthTokens(accessToken, refreshToken, user.getUserType().name(), clientInfoId);
+        return new AuthTokens(accessToken, rawRefreshToken, user.getUserType().name(), clientInfoId);
     }
 
-    @Transactional
-    public AuthTokens refresh(Long userId) {
-        RefreshToken stored = refreshTokenRepository.findByUserId(userId)
-                .orElseThrow(() -> new CustomException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
-
-        if (stored.isExpired()) {
-            refreshTokenRepository.delete(stored);
-            throw new CustomException(ErrorCode.REFRESH_TOKEN_EXPIRED);
-        }
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
-
-        refreshTokenRepository.delete(stored);
-
-        String newAccessToken = jwtUtil.generateToken(user.getId(), user.getUserType());
-        String newRefreshToken = createAndSaveRefreshToken(user.getId());
-
-        return new AuthTokens(newAccessToken, newRefreshToken, user.getUserType().name(), null);
-    }
-
-    @Transactional
-    public void logout(Long userId) {
-        refreshTokenRepository.deleteByUserId(userId);
+    private LocalDateTime refreshExpiresAt(LocalDateTime now) {
+        return now.plusSeconds(refreshExpirationMs / 1000);
     }
 
     private String createAndSaveRefreshToken(Long userId) {
         String token = RefreshTokenHasher.newRawToken();
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(refreshExpirationMs / 1000);
-
-        refreshTokenRepository.upsertForUser(userId, RefreshTokenHasher.sha256Hex(token), expiresAt);
+        refreshTokenRepository.upsertForUser(
+                userId, RefreshTokenHasher.sha256Hex(token), refreshExpiresAt(LocalDateTime.now()));
 
         return token;
     }

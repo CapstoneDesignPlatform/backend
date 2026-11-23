@@ -11,11 +11,13 @@ import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
 
-    Optional<RefreshToken> findByUserId(Long userId);
-
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
     void deleteByUserId(Long userId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM RefreshToken r WHERE r.tokenHash = :tokenHash")
+    int deleteByTokenHash(@Param("tokenHash") String tokenHash);
 
     /** 사용자당 1행 정책: 행이 있으면 해시와 만료 시각만 덮어쓴다. 동시 로그인에도 중복 행이 생기지 않는다. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

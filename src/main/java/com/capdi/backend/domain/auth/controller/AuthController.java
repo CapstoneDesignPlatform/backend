@@ -3,11 +3,10 @@ package com.capdi.backend.domain.auth.controller;
 import com.capdi.backend.domain.auth.dto.AuthTokens;
 import com.capdi.backend.domain.auth.dto.LoginRequest;
 import com.capdi.backend.domain.auth.dto.LoginResponse;
+import com.capdi.backend.domain.auth.dto.RefreshRequest;
 import com.capdi.backend.domain.auth.dto.SignupRequest;
 import com.capdi.backend.domain.auth.dto.TokenResponse;
 import com.capdi.backend.domain.auth.service.AuthService;
-import com.capdi.backend.global.exception.CustomException;
-import com.capdi.backend.global.exception.ErrorCode;
 import com.capdi.backend.global.response.ApiResponse;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,21 +43,19 @@ public class AuthController {
 
     @PostMapping("/refresh")
     @Operation(summary = "토큰 갱신")
-    public ResponseEntity<ApiResponse<TokenResponse>> refresh(@AuthenticationPrincipal CustomUserDetails userDetails) {
-        if (userDetails == null) {
-            throw new CustomException(ErrorCode.UNAUTHORIZED);
-        }
-        AuthTokens tokens = authService.refresh(userDetails.getUserId());
+    public ResponseEntity<ApiResponse<TokenResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
+        AuthTokens tokens = authService.refresh(request.getRefreshToken());
         return ResponseEntity.ok(ApiResponse.ok("토큰 갱신 성공.", TokenResponse.of(tokens)));
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "로그아웃")
+    @Operation(summary = "로그아웃", description = "본문의 refreshToken 또는 인증된 사용자의 refresh 토큰을 폐기")
     public ResponseEntity<ApiResponse<Void>> logout(
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        if (userDetails != null) {
-            authService.logout(userDetails.getUserId());
-        }
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody(required = false) RefreshRequest request) {
+        Long userId = userDetails != null ? userDetails.getUserId() : null;
+        String refreshToken = request != null ? request.getRefreshToken() : null;
+        authService.logout(userId, refreshToken);
         return ResponseEntity.ok(ApiResponse.ok("로그아웃 성공."));
     }
 }
