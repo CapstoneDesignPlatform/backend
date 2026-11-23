@@ -65,7 +65,7 @@ class FullSchemaValidationMySqlTest {
     @MockitoBean GoogleVisionOcrClient vision;
     @MockitoBean NtsHttpTransport nts;
 
-    @Test void fullApplicationContextValidatesEveryEntityAgainstFlywayV1ThroughV27() throws Exception {
+    @Test void fullApplicationContextValidatesEveryEntityAgainstFlywayV1ThroughV28() throws Exception {
         assertThat(context.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(context.getBeansOfType(Repository.class)).hasSize(41);
         var scanner = new ClassPathScanningCandidateComponentProvider(false);
@@ -76,7 +76,7 @@ class FullSchemaValidationMySqlTest {
                 .map(type -> type.getJavaType().getName()).toList();
         assertThat(discovered).isNotEmpty();assertThat(mapped).containsExactlyInAnyOrderElementsOf(discovered);
         assertThat(Arrays.stream(flyway.info().applied()).map(info -> info.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1, 27).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, 28).mapToObj(String::valueOf).toList());
         flyway.validate();
         try (var connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo("capdi52_full_schema_test");

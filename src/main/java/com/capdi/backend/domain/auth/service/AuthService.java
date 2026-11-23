@@ -21,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -119,14 +118,10 @@ public class AuthService {
     }
 
     private String createAndSaveRefreshToken(Long userId) {
-        String token = UUID.randomUUID().toString();
+        String token = RefreshTokenHasher.newRawToken();
         LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(refreshExpirationMs / 1000);
 
-        refreshTokenRepository.save(RefreshToken.builder()
-                .userId(userId)
-                .token(token)
-                .expiresAt(expiresAt)
-                .build());
+        refreshTokenRepository.upsertForUser(userId, RefreshTokenHasher.sha256Hex(token), expiresAt);
 
         return token;
     }
