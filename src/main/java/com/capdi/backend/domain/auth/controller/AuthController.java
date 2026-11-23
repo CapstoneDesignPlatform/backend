@@ -5,7 +5,6 @@ import com.capdi.backend.domain.auth.dto.LoginRequest;
 import com.capdi.backend.domain.auth.dto.LoginResponse;
 import com.capdi.backend.domain.auth.dto.RefreshRequest;
 import com.capdi.backend.domain.auth.dto.SignupRequest;
-import com.capdi.backend.domain.auth.dto.TokenResponse;
 import com.capdi.backend.domain.auth.service.AuthService;
 import com.capdi.backend.global.response.ApiResponse;
 import com.capdi.backend.global.jwt.CustomUserDetails;
@@ -43,9 +42,9 @@ public class AuthController {
 
     @PostMapping("/refresh")
     @Operation(summary = "토큰 갱신")
-    public ResponseEntity<ApiResponse<TokenResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
+    public ResponseEntity<ApiResponse<LoginResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
         AuthTokens tokens = authService.refresh(request.getRefreshToken());
-        return ResponseEntity.ok(ApiResponse.ok("토큰 갱신 성공.", TokenResponse.of(tokens)));
+        return ResponseEntity.ok(ApiResponse.ok("토큰 갱신 성공.", LoginResponse.of(tokens)));
     }
 
     @PostMapping("/logout")
