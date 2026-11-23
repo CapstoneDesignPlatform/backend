@@ -13,7 +13,10 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
-    void deleteByUserId(Long userId);
+    /** 조회 후 엔티티 삭제 대신 bulk DELETE를 쓴다. 동시 로그아웃으로 행이 이미 없어도 0건 삭제로 끝난다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM RefreshToken r WHERE r.userId = :userId")
+    int deleteByUserId(@Param("userId") Long userId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM RefreshToken r WHERE r.tokenHash = :tokenHash")

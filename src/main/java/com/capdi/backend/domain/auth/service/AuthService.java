@@ -84,7 +84,9 @@ public class AuthService {
      * 클라이언트가 보낸 refresh 토큰 원문을 검증하고 새 토큰으로 교체한다.
      * 교체는 조건부 UPDATE로 원자적으로 처리되어, 같은 토큰으로 동시에 요청하면 하나만 성공한다.
      */
-    @Transactional
+    // 만료 토큰 삭제가 REFRESH_TOKEN_EXPIRED 예외로 롤백되지 않도록 CustomException은 커밋한다.
+    // 이 메서드에서 CustomException 전에 일어나는 쓰기는 그 삭제뿐이다.
+    @Transactional(noRollbackFor = CustomException.class)
     public AuthTokens refresh(String rawRefreshToken) {
         LocalDateTime now = LocalDateTime.now();
         String oldHash = RefreshTokenHasher.sha256Hex(rawRefreshToken);
@@ -93,7 +95,9 @@ public class AuthService {
                 .orElseThrow(() -> new CustomException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
         if (!stored.getExpiresAt().isAfter(now)) {
-            refreshTokenRepository.delete(stored);
+            // id가 아닌 해시 조건으로 지운다. 그 사이 로그인으로 같은 행에 새 토큰이 써졌으면 건드리지 않고,
+            // 동시 요청이 먼저 지웠으면 0건 삭제로 끝난다(엔티티 delete는 이 경우 낙관적 락 예외로 500).
+            refreshTokenRepository.deleteByTokenHash(oldHash);
             throw new CustomException(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
 
