@@ -111,7 +111,7 @@ class FinancialWorkflowMySqlIntegrationTest {
     @MockitoBean GoogleVisionOcrClient vision;@MockitoBean NtsHttpTransport nts;
     @LocalServerPort int port;
     record Fixture(long client,long expert,long payment) { }
-    record Reply(int status,JsonNode data) { }
+    record Reply(int status,JsonNode data,String body) { }
     @BeforeEach void setup() throws Exception {
         fake.reset();finance.reset();fakePayout.reset();fakeTax.reset();taxAuthorized.set(false);reset(financeOperations);((MutableClock)clock).reset();
         try(var c=dataSource.getConnection()) {
@@ -148,7 +148,7 @@ class FinancialWorkflowMySqlIntegrationTest {
         var headers=new HttpHeaders();headers.setContentType(MediaType.APPLICATION_JSON);
         if(user!=null)headers.setBearerAuth(jwt.generateToken(user,role));if(key!=null)headers.set("Idempotency-Key",key);
         var r=http.exchange("http://127.0.0.1:"+port+"/api"+route,method,new HttpEntity<>(body,headers),String.class);
-        return new Reply(r.getStatusCode().value(),mapper.readTree(r.getBody()).path("data"));
+        return new Reply(r.getStatusCode().value(),mapper.readTree(r.getBody()).path("data"),r.getBody());
     }
     Reply prepare(Fixture f,String key,PaymentMethod method) throws Exception {
         return send(f.client(),UserTypeEnum.CLIENT,HttpMethod.POST,"/payments/"+f.payment()+"/attempts",Map.of("method",method.name()),key);
@@ -182,7 +182,7 @@ class FinancialWorkflowMySqlIntegrationTest {
  record Ready(Fixture fixture,long admin,long seller,long account){}
  long newAdmin(){return users.saveAndFlush(User.builder().userType(UserTypeEnum.ADMIN).name("Synthetic Admin")
    .email(UUID.randomUUID()+"@example.test").phone("01000000000").build()).getId();}
- long id(Reply r){assertThat(r.status()).isEqualTo(200);return r.data().path("id").asLong();}
+ long id(Reply r){assertThat(r.status()).as("response body: %s",r.body()).isEqualTo(200);return r.data().path("id").asLong();}
  Ready financialFixture() throws Exception {
   var f=order(PaymentMethod.CARD);long a=ready(f);assertThat(confirm(f,a,"financial-flow").status()).isEqualTo(200);long admin=newAdmin();
   Long infoId=new TransactionTemplate(manager).execute(tx->{
@@ -198,8 +198,13 @@ class FinancialWorkflowMySqlIntegrationTest {
   var enrollment=send(f.expert(),UserTypeEnum.EXPERT,HttpMethod.POST,"/expert/me/partner-enrollments",
     Map.of("account_id",account,"expected_seller_version",seller.data().path("version").asLong()),"enrollment");
   long op=id(enrollment);assertThat(execute(admin,op).data().path("state").asText()).isEqualTo("SUCCEEDED");
+  completeService(f);
   assertThat(send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+f.payment()+"/settlements",null,null).status()).isEqualTo(200);
   finance.reset();return new Ready(f,admin,sellerId,account);
+ }
+ void completeService(Fixture f) {
+  Long announcement=jdbc.queryForObject("SELECT announcement_id FROM payments WHERE id=?",Long.class,f.payment());
+  assertThat(jdbc.update("UPDATE announcement SET progress_step='STEP_7_COMPLETED' WHERE id=?",announcement)).isEqualTo(1);
  }
  long account(Fixture f) throws Exception {
   return id(send(f.expert(),UserTypeEnum.EXPERT,HttpMethod.POST,"/expert/me/settlement-accounts",
@@ -333,12 +338,17 @@ class FinancialWorkflowMySqlIntegrationTest {
   return id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/billing-party-snapshots",body,null));
  }
  @Test void invoiceIssuanceNtsFailureAndCorrectionPreserveOriginalDocument() throws Exception {
-  var r=financialFixture();long supplier=party(r,"PLATFORM",null),recipient=party(r,"EXPERT",r.fixture().expert());
+  taxAuthorized.set(true);var r=financialFixture();internalProfile(r,0);long supplier=party(r,"PLATFORM",null),recipient=party(r,"EXPERT",r.fixture().expert());
   long sd=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+r.fixture().payment()+"/settlement-drafts",null,null));
   long draft=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/settlement-drafts/"+sd+"/tax-invoice-drafts",Map.of("kind","PLATFORM_TO_EXPERT"),"invoice"));
   var body=Map.of("supplier_snapshot_id",supplier,"recipient_snapshot_id",recipient,"supply",90,"vat",10,"taxation","TAXABLE","write_date","2026-01-01");
   long invoice=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-invoice-drafts/"+draft+"/invoices",body,null));
-  long op=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/financial-tax-invoices/"+invoice+"/attempts",null,"tax-op"));
+  var internalBody=Map.<String,Object>of("kind","PLATFORM_TO_EXPERT","supplier_snapshot_id",supplier,"recipient_snapshot_id",recipient,
+    "supply",90,"vat",10,"total",100,"taxation","TAXABLE","write_date","2026-01-01","items",List.of(Map.of("item_code","SERVICE","supply",90,"vat",10)));
+  long doc=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+r.fixture().payment()+"/tax-documents",internalBody,"canonical-doc"));
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-documents/"+doc+"/reviews",Map.of("approve",true,"expected_version",0,"reason_code","REVIEW"),null).status()).isEqualTo(200);
+  long execution=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-documents/"+doc+"/execution-requests",Map.of("expected_version",1),"tax-op"));
+  long op=taxPersistence.canonicalOperationId(r.admin(),execution);
   assertThat(id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/financial-tax-invoices/"+invoice+"/attempts",null,"tax-op"))).isEqualTo(op);
   finance.submitFunction=c->{var e=finance.evidence(c,FinancialGateway.State.SUCCEEDED);return new FinancialGateway.Evidence(e.reference(),e.externalId(),e.state(),e.amount(),e.currency(),false,false,FinancialGateway.NtsState.FAILED);};
   execute(r.admin(),op);
@@ -353,6 +363,14 @@ class FinancialWorkflowMySqlIntegrationTest {
   correction.put("original_invoice_id",invoice);correction.put("modification","CANCELLATION_OF_CONTRACT");
   long next=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-invoice-drafts/"+correctionDraft+"/invoices",correction,null));
   assertThat(next).isNotEqualTo(invoice);
+  var correctionDocBody=Map.<String,Object>ofEntries(Map.entry("kind","PLATFORM_TO_EXPERT"),Map.entry("supplier_snapshot_id",supplier),
+    Map.entry("recipient_snapshot_id",recipient),Map.entry("original_document_id",doc),Map.entry("modification","CANCELLATION_OF_CONTRACT"),
+    Map.entry("supply",-90),Map.entry("vat",-10),Map.entry("total",-100),Map.entry("taxation","TAXABLE"),Map.entry("write_date","2026-01-01"),
+    Map.entry("items",List.of(Map.of("item_code","CANCELLATION","supply",-90,"vat",-10))));
+  long correctionDoc=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+r.fixture().payment()+"/tax-documents",correctionDocBody,"canonical-correction"));
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-documents/"+correctionDoc+"/reviews",Map.of("approve",true,"expected_version",0,"reason_code","CORRECTION_REVIEW"),null).status()).isEqualTo(200);
+  long correctionExecution=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-documents/"+correctionDoc+"/execution-requests",Map.of("expected_version",1),"correction-op"));
+  assertThat(taxPersistence.canonicalOperationId(r.admin(),correctionExecution)).isNotNull();
   assertThat(taxInvoices.findById(invoice).orElseThrow().getSupply()).isEqualByComparingTo("90");
   assertThat(taxInvoices.findById(next).orElseThrow().getSupply()).isEqualByComparingTo("-90");assertThat(finance.submits).hasValue(writes);
  }
@@ -414,7 +432,7 @@ class FinancialWorkflowMySqlIntegrationTest {
   assertThat(payoutApproval(r,900)).isPositive();assertThat(finance.submits).hasValue(0);
  }
  @Test void payoutCanBeHeldBeforeAccountExistsButCannotBeApprovedWithoutAnAccount() throws Exception {
-  var f=order(PaymentMethod.CARD);long attempt=ready(f);confirm(f,attempt,"hold-no-account");long admin=newAdmin();
+  var f=order(PaymentMethod.CARD);long attempt=ready(f);confirm(f,attempt,"hold-no-account");completeService(f);long admin=newAdmin();
   var initialized=send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+f.payment()+"/settlements",null,null);
   var body=new HashMap<String,Object>(Map.of("decision","HOLD","expected_balance_version",initialized.data().path("version").asLong(),"amount",900,"reason_code","ACCOUNT_REQUIRED"));
   var hold=send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+f.payment()+"/payout-approvals",body,null);
@@ -422,6 +440,93 @@ class FinancialWorkflowMySqlIntegrationTest {
   body.put("decision","APPROVED");body.put("expected_balance_version",hold.data().path("balance_version").asLong());
   assertThat(send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+f.payment()+"/payout-approvals",body,null).status()).isEqualTo(400);
   assertThat(finance.submits).hasValue(0);
+ }
+
+ @Test void settlementRequiresRecordedServiceCompletionAndUsesPolicyV1Allocation() throws Exception {
+  var f=order(PaymentMethod.CARD);long attempt=ready(f);confirm(f,attempt,"settlement-before-completion");long admin=newAdmin();
+  String path="/admin/payments/"+f.payment()+"/settlements";
+  assertThat(send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,path,null,null).status()).isEqualTo(409);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM settlement_balances WHERE payment_id=?",Long.class,f.payment())).isZero();
+  completeService(f);
+  assertThat(send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,path,null,null).status()).isEqualTo(200);
+  var balance=send(admin,UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/payments/"+f.payment()+"/settlement",null,null).data();
+  assertThat(balance.path("platform").decimalValue()).isEqualByComparingTo("100.00");
+  assertThat(balance.path("expert").decimalValue()).isEqualByComparingTo("900.00");
+ }
+
+ @Test void repeatedIdenticalPayoutApprovalReusesTheSameApproval() throws Exception {
+  var r=financialFixture();long first=payoutApproval(r,900);long second=payoutApproval(r,900);
+  assertThat(second).isEqualTo(first);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_approvals WHERE payment_id=? AND kind='PAYOUT'",Long.class,r.fixture().payment())).isEqualTo(1);
+ }
+
+ @Test void approvedPayoutRemainsPendingWhenExternalPayoutProviderIsUnavailable() throws Exception {
+  var r=financialFixture();finance.enabled=false;
+  var body=Map.of("decision","APPROVED","expected_balance_version",balance(r).path("version").asLong(),
+   "account_id",r.account(),"expected_account_revision",1,"amount",900,"reason_code","PAYOUT_PROVIDER_UNAVAILABLE");
+  var approved=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+r.fixture().payment()+"/payout-approvals",body,null);
+  assertThat(approved.status()).isEqualTo(200);
+  assertThat(approved.data().path("state").asText()).isEqualTo("APPROVED");
+  assertThat(approved.data().path("execution_state").asText()).isEqualTo("PENDING_EXTERNAL_PROVIDER");
+  assertThat(finance.submits).hasValue(0);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE payment_id=? AND kind='PAYOUT'",Long.class,r.fixture().payment())).isZero();
+ }
+
+ @Test void legacyPayoutReservationIsCanonicalAliasAndStaysPendingWithoutProvider() throws Exception {
+  var r=financialFixture();internalProfile(r,0);finance.enabled=false;
+  String path="/admin/payments/"+r.fixture().payment()+"/settlement-reviews";
+  long review=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path,
+   Map.of("balance_version",balance(r).path("version").asLong(),"profile_revision",1),"legacy-pending"));
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",
+   Map.of("decision","APPROVED","expected_version",0,"reason_code","PENDING_PROVIDER"),null).status()).isEqualTo(200);
+  var first=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null);
+  assertThat(first.status()).isEqualTo(200);
+  long alias=first.data().path("id").asLong();
+  assertThat(first.data().path("execution_state").asText()).isEqualTo("PENDING_EXTERNAL_PROVIDER");
+  assertThat(first.data().path("financial_operation_id").isNull()).isTrue();
+  assertThat(id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null))).isEqualTo(alias);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM internal_payouts WHERE review_id=?",Integer.class,review)).isZero();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE approval_id=?",Integer.class,
+    jdbc.queryForObject("SELECT approval_id FROM payout_compatibility_links WHERE id=?",Long.class,alias))).isZero();
+  assertThat(balance(r).path("reserved").decimalValue()).isEqualByComparingTo("0");
+  var adminList=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/payments/"+r.fixture().payment()+"/internal-payouts",null,null);
+  var expertList=send(r.fixture().expert(),UserTypeEnum.EXPERT,HttpMethod.GET,"/expert/me/settlements/"+r.fixture().payment()+"/payouts",null,null);
+  assertThat(adminList.data().get(0).path("id").asLong()).isEqualTo(alias);
+  assertThat(expertList.data().get(0).path("state").asText()).isEqualTo(adminList.data().get(0).path("state").asText());
+  finance.enabled=true;
+  var upgraded=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null);
+  assertThat(upgraded.data().path("financial_operation_id").asLong()).isPositive();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE approval_id=?",Integer.class,
+    jdbc.queryForObject("SELECT approval_id FROM payout_compatibility_links WHERE id=?",Long.class,alias))).isEqualTo(1);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM internal_payouts WHERE review_id=?",Integer.class,review)).isZero();
+ }
+
+ @Test void pendingCompatibilityAliasCannotCreateOperationAfterProfileRevisionChanges() throws Exception {
+  var r=financialFixture();internalProfile(r,0);finance.enabled=false;
+  String path="/admin/payments/"+r.fixture().payment()+"/settlement-reviews";
+  long review=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path,
+   Map.of("balance_version",balance(r).path("version").asLong(),"profile_revision",1),"stale-pending-alias"));
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",
+   Map.of("decision","APPROVED","expected_version",0,"reason_code","PENDING_PROVIDER"),null).status()).isEqualTo(200);
+  long alias=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null));
+  internalProfile(r,1);
+  finance.enabled=true;
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null).status()).isEqualTo(409);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE approval_id=(SELECT approval_id FROM payout_compatibility_links WHERE id=?)",Integer.class,alias)).isZero();
+  assertThat(balance(r).path("reserved").decimalValue()).isEqualByComparingTo("0");
+ }
+
+ @Test void legacyAndCanonicalPayoutPathsCannotReserveTheSamePayment() throws Exception {
+  var r=financialFixture();internalProfile(r,0);payoutApproval(r,900);
+  String path="/admin/payments/"+r.fixture().payment()+"/settlement-reviews";
+  var review=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path,
+   Map.of("balance_version",balance(r).path("version").asLong(),"profile_revision",1),"legacy-after-canonical");
+  long reviewId=id(review);
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+reviewId+"/decisions",
+   Map.of("decision","APPROVED","expected_version",0,"reason_code","SYNTHETIC_REVIEW"),null).status()).isEqualTo(200);
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+reviewId+"/payout-reservations",null,null).status()).isEqualTo(409);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM internal_payouts WHERE review_id=?",Long.class,reviewId)).isZero();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE payment_id=? AND kind='PAYOUT'",Long.class,r.fixture().payment())).isZero();
  }
 
  @Test void payoutTimeoutKeepsReservationAndLookupCompletesWithoutSendingAgain() throws Exception {
@@ -513,11 +618,38 @@ class FinancialWorkflowMySqlIntegrationTest {
   var decision=Map.of("decision","APPROVED","expected_version",0,"reason_code","LOCAL_REVIEW");
   var approved=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+reviewId+"/decisions",decision,null);
   assertThat(approved.status()).isEqualTo(200);assertThat(approved.data().path("state").asText()).isEqualTo("APPROVED");
-  assertThat(approved.data().path("execution_state").asText()).isEqualTo("POLICY_HOLD");assertThat(approved.data().path("payout_executable").asBoolean()).isFalse();
+  assertThat(approved.data().path("execution_state").asText()).isEqualTo("PENDING_EXTERNAL_PROVIDER");assertThat(approved.data().path("payout_executable").asBoolean()).isFalse();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_approvals WHERE settlement_review_id=? AND kind='PAYOUT'",Long.class,reviewId)).isEqualTo(1);
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+reviewId+"/decisions",decision,null).status()).isEqualTo(200);
   internalProfile(r,1);
   var history=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.GET,path,null,null);assertThat(history.data().get(0).path("snapshot_current").asBoolean()).isFalse();
   assertThat(finance.submits).hasValue(0);assertThat(finance.lookups).hasValue(0);journalBalanced(r);
+ }
+ @Test void legacyReviewAndCanonicalApprovalShareOneDurableApprovalAndProjection() throws Exception {
+  var r=financialFixture();internalProfile(r,0);String path="/admin/payments/"+r.fixture().payment()+"/settlement-reviews";
+  long review=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path,
+    Map.of("balance_version",balance(r).path("version").asLong(),"profile_revision",1),"approval-bridge"));
+  var decision=Map.of("decision","APPROVED","expected_version",0,"reason_code","BRIDGED_REVIEW");
+  var first=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",decision,null);
+  assertThat(first.status()).isEqualTo(200);assertThat(first.data().path("id").asLong()).isEqualTo(review);
+  assertThat(first.data().path("state").asText()).isEqualTo("APPROVED");
+  Long approvalId=jdbc.queryForObject("SELECT id FROM financial_approvals WHERE settlement_review_id=?",Long.class,review);
+  assertThat(jdbc.queryForObject("SELECT approval_source FROM financial_approvals WHERE id=?",String.class,approvalId)).isEqualTo("SETTLEMENT_REVIEW");
+  assertThat(jdbc.queryForObject("SELECT account_revision FROM financial_approvals WHERE id=?",Long.class,approvalId)).isEqualTo(1L);
+  assertThat(jdbc.queryForObject("SELECT balance_version FROM financial_approvals WHERE id=?",Long.class,approvalId))
+    .isEqualTo(jdbc.queryForObject("SELECT balance_version FROM settlement_reviews WHERE id=?",Long.class,review));
+  var approvals=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/payments/"+r.fixture().payment()+"/payout-approvals",null,null);
+  assertThat(approvals.status()).isEqualTo(200);
+  assertThat(approvals.data().get(0).path("id").asLong()).isEqualTo(approvalId);
+  var repeated=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",decision,null);
+  assertThat(repeated.status()).isEqualTo(200);assertThat(repeated.data().path("id").asLong()).isEqualTo(review);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_approvals WHERE settlement_review_id=?",Long.class,review)).isEqualTo(1);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE payment_id=? AND kind='PAYOUT'",Long.class,r.fixture().payment())).isZero();
+  jdbc.update("UPDATE settlement_reviews SET state='ON_HOLD',reason_code='LEGACY_DRIFT' WHERE id=?",review);
+  var projected=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.GET,path,null,null);
+  assertThat(projected.data().get(0).path("id").asLong()).isEqualTo(review);
+  assertThat(projected.data().get(0).path("state").asText()).isEqualTo("APPROVED");
+  assertThat(projected.data().get(0).path("reason_code").asText()).isEqualTo("BRIDGED_REVIEW");
  }
  @Test void internalSettlementListsEnforceRolesAndOwnership() throws Exception {
   var r=financialFixture();internalProfile(r,0);
@@ -539,35 +671,38 @@ class FinancialWorkflowMySqlIntegrationTest {
    var two=pool.submit(()->send(second,UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",Map.of("decision","REJECTED","expected_version",0,"reason_code","DECLINED"),null).status());
    assertThat(List.of(one.get(),two.get())).containsExactlyInAnyOrder(200,409);
   }finally{pool.shutdownNow();}
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_approvals WHERE settlement_review_id=?",Long.class,review)).isEqualTo(1);
  }
 
  @Test void internalPayoutUnknownUsesLookupAndNeverResends() throws Exception {
   var r=financialFixture();internalProfile(r,0);fakePayout.reset();
+  finance.submitFunction=c->finance.evidence(c,FinancialGateway.State.UNKNOWN);
   var path="/admin/payments/"+r.fixture().payment()+"/settlement-reviews";
   long review=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path,Map.of("balance_version",balance(r).path("version").asLong(),"profile_revision",1),"internal-payout"));
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",Map.of("decision","APPROVED","expected_version",0,"reason_code","INTERNAL_REVIEW"),null).status()).isEqualTo(200);
   String reservePath=path+"/"+review+"/payout-reservations";
   long payout=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,reservePath,null,null));
   assertThat(id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,reservePath,null,null))).isEqualTo(payout);
-  fakePayout.next=PayoutProvider.State.UNKNOWN;
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM internal_payouts WHERE review_id=?",Integer.class,review)).isZero();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE payment_id=? AND kind='PAYOUT'",Integer.class,r.fixture().payment())).isEqualTo(1);
   var result=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null);
   assertThat(result.status()).isEqualTo(200);assertThat(result.data().path("state").asText()).isEqualTo("UNKNOWN");
-  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null).status()).isEqualTo(409);
+  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null).status()).isEqualTo(200);
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/cancellations",null,null).status()).isEqualTo(409);
-  fakePayout.next=PayoutProvider.State.SUCCEEDED;
+  finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.SUCCEEDED);
   var restored=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/reconciliations",null,null);
   assertThat(restored.status()).isEqualTo(200);assertThat(restored.data().path("state").asText()).isEqualTo("SUCCEEDED");
   assertThat(restored.data().path("real_transfer_confirmed").asBoolean()).isFalse();
-  assertThat(fakePayout.requests).hasValue(1);assertThat(fakePayout.lookups).hasValue(1);
+  assertThat(fakePayout.requests).hasValue(0);assertThat(fakePayout.lookups).hasValue(0);assertThat(finance.submits).hasValue(1);assertThat(finance.lookups).hasValue(1);
   assertThat(balance(r).path("paid").decimalValue()).isEqualByComparingTo("900");journalBalanced(r);
  }
  @Test void internalPayoutAccountChangeBlocksDispatchAndCanReleaseReservation() throws Exception {
   var r=financialFixture();internalProfile(r,0);fakePayout.reset();var path="/admin/payments/"+r.fixture().payment()+"/settlement-reviews";
   long review=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path,Map.of("balance_version",balance(r).path("version").asLong(),"profile_revision",1),"stale-account"));
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/decisions",Map.of("decision","APPROVED","expected_version",0,"reason_code","CHECKED"),null).status()).isEqualTo(200);
-  long payout=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null));internalProfile(r,1);
-  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null).status()).isEqualTo(409);
-  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/cancellations",null,null).status()).isEqualTo(200);
+  long payout=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null));account(r.fixture());
+  var blocked=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null);
+  assertThat(blocked.status()).isEqualTo(200);assertThat(blocked.data().path("financial_operation_state").asText()).isEqualTo("BLOCKED");
   assertThat(balance(r).path("reserved").decimalValue()).isEqualByComparingTo("0");assertThat(fakePayout.requests).hasValue(0);journalBalanced(r);
  }
 
@@ -635,15 +770,16 @@ class FinancialWorkflowMySqlIntegrationTest {
   return id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,path+"/"+review+"/payout-reservations",null,null));
  }
  @Test void internalPayoutRejectsWrongAmountWithoutReleasingReservation() throws Exception {
-  var r=financialFixture();long payout=reservedInternal(r,"wrong-amount");fakePayout.amountOverride=BigDecimal.ONE;
+  var r=financialFixture();long payout=reservedInternal(r,"wrong-amount");finance.submitFunction=c->new FinancialGateway.Evidence(c.reference(),"synthetic-payout",FinancialGateway.State.SUCCEEDED,BigDecimal.ONE,"KRW",false,false,FinancialGateway.NtsState.NOT_SENT,FinancialGateway.BankState.UNVERIFIED);
   var result=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null);
   assertThat(result.status()).isEqualTo(200);assertThat(result.data().path("state").asText()).isEqualTo("UNKNOWN");
   assertThat(balance(r).path("reserved").decimalValue()).isEqualByComparingTo("900");assertThat(balance(r).path("paid").decimalValue()).isEqualByComparingTo("0");journalBalanced(r);
  }
  @Test void internalPayoutRejectsProviderIdentityChangeBeforeAnyRequest() throws Exception {
-  var r=financialFixture();long payout=reservedInternal(r,"provider-change");fakePayout.providerCode="OTHER_PROVIDER";
-  assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null).status()).isEqualTo(409);
-  assertThat(fakePayout.requests).hasValue(0);
+  var r=financialFixture();long payout=reservedInternal(r,"provider-change");finance.providerIdentity=new FinancialGateway.Identity("OTHER_PROVIDER","synthetic-merchant","synthetic-store","TEST");
+  var blocked=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null);
+  assertThat(blocked.status()).isEqualTo(200);assertThat(blocked.data().path("financial_operation_state").asText()).isEqualTo("BLOCKED");
+  assertThat(fakePayout.requests).hasValue(0);assertThat(finance.submits).hasValue(0);
  }
  record TaxFlow(Ready ready,long document,Map<String,Object> body){}
  TaxFlow taxFlow() throws Exception {
@@ -656,33 +792,49 @@ class FinancialWorkflowMySqlIntegrationTest {
  }
  Reply taxPrepare(TaxFlow f,String key) throws Exception {return send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-documents/"+f.document()+"/execution-requests",Map.of("expected_version",1),key);}
  Reply taxExecute(TaxFlow f,long id,boolean lookup) throws Exception {return send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-document-executions/"+id+(lookup?"/reconciliations":"/executions"),null,null);}
- @Test void taxTimeoutRecoversByLookupAndNtsTransmissionIsIndependent() throws Exception {
-  var f=taxFlow();long execution=id(taxPrepare(f,"issue-once"));fakeTax.timeout=true;
+ @Test void taxTimeoutRecoversThroughCanonicalOperationLookupOnlyAndNtsIsIndependent() throws Exception {
+  var f=taxFlow();long execution=id(taxPrepare(f,"issue-once"));finance.submitFunction=c->{throw new IllegalStateException("synthetic timeout");};
   assertThat(taxExecute(f,execution,false).data().path("state").asText()).isEqualTo("UNKNOWN");
-  assertThat(taxExecute(f,execution,false).status()).isEqualTo(409);
-  fakeTax.timeout=false;fakeTax.transmission=TaxInvoiceProvider.TransmissionState.FAILED;
+  var repeated=taxExecute(f,execution,false);assertThat(repeated.status()).isEqualTo(200);
+  assertThat(repeated.data().path("state").asText()).isEqualTo("UNKNOWN");assertThat(finance.submits).hasValue(1);
+  finance.lookupFunction=c->new FinancialGateway.Evidence(c.reference(),"synthetic-tax-"+c.reference(),FinancialGateway.State.SUCCEEDED,
+    c.payload().path("amount").decimalValue(),"KRW",false,false,FinancialGateway.NtsState.FAILED);
   var issued=taxExecute(f,execution,true);assertThat(issued.status()).isEqualTo(200);
   assertThat(issued.data().path("state").asText()).isEqualTo("ISSUED");assertThat(issued.data().path("nts_state").asText()).isEqualTo("FAILED");
   assertThat(issued.data().path("test_issuance").asBoolean()).isTrue();assertThat(issued.data().path("legally_issued").asBoolean()).isFalse();
-  fakeTax.transmission=TaxInvoiceProvider.TransmissionState.SUCCEEDED;
+  finance.lookupFunction=c->new FinancialGateway.Evidence(c.reference(),"synthetic-tax-"+c.reference(),FinancialGateway.State.SUCCEEDED,
+    c.payload().path("amount").decimalValue(),"KRW",false,false,FinancialGateway.NtsState.SUCCEEDED);
   assertThat(taxExecute(f,execution,true).data().path("nts_state").asText()).isEqualTo("SUCCEEDED");
-  assertThat(fakeTax.requests).hasValue(1);assertThat(fakeTax.lookups).hasValue(2);
+  assertThat(finance.submits).hasValue(1);assertThat(finance.lookups).hasValue(2);assertThat(fakeTax.requests).hasValue(0);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE kind='TAX_INVOICE' AND payment_id=?",Integer.class,f.ready().fixture().payment())).isEqualTo(1);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM internal_tax_executions WHERE financial_operation_id IS NOT NULL AND document_id=?",Integer.class,f.document())).isEqualTo(1);
   var events=send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/tax-document-executions/"+execution+"/events",null,null);
-  assertThat(events.status()).isEqualTo(200);assertThat(events.data().size()).isGreaterThanOrEqualTo(7);
+  assertThat(events.status()).isEqualTo(200);assertThat(events.data().size()).isGreaterThanOrEqualTo(1);
   assertThat(events.data().toString()).doesNotContain("supplierJson","1234567891","lease","snapshot_hash");
  }
  @Test void canonicalInvoiceCannotBeIssuedByBothOldAndNewApis() throws Exception {
   var f=taxFlow();var first=taxPrepare(f,"canonical");long execution=id(first);
   assertThat(id(taxPrepare(f,"canonical"))).isEqualTo(execution);assertThat(taxPrepare(f,"different").status()).isEqualTo(409);
   long invoice=first.data().path("invoice_id").asLong();
-  assertThat(send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/financial-tax-invoices/"+invoice+"/attempts",null,"legacy-bypass").status()).isEqualTo(409);
+  finance.enabled=false;
+  var legacyCall=send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/financial-tax-invoices/"+invoice+"/attempts",null,"legacy-bypass");
+  assertThat(legacyCall.status()).isEqualTo(200);assertThat(legacyCall.data().path("id").asLong()).isEqualTo(first.data().path("financial_operation_id").asLong());
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_tax_invoices WHERE payment_id=?",Integer.class,f.ready().fixture().payment())).isEqualTo(1);
-  assertThat(fakeTax.requests).hasValue(0);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE kind='TAX_INVOICE' AND invoice_id=?",Integer.class,invoice)).isEqualTo(1);
+  assertThat(fakeTax.requests).hasValue(0);assertThat(finance.submits).hasValue(0);
  }
  @Test void taxIssuancePolicyRemainsClosedUntilExplicitlyReviewed() throws Exception {
   var f=taxFlow();taxAuthorized.set(false);
   assertThat(taxPrepare(f,"policy-closed").status()).isEqualTo(503);
   assertThat(fakeTax.requests).hasValue(0);
+ }
+ @Test void disabledTaxProviderKeepsApprovedDocumentPendingWithoutCreatingOperation() throws Exception {
+  var f=taxFlow();finance.enabled=false;var prepared=taxPrepare(f,"provider-disabled");
+  assertThat(prepared.status()).isEqualTo(200);assertThat(prepared.data().path("financial_operation_id").isNull()).isTrue();
+  assertThat(prepared.data().path("canonical_state").asText()).isEqualTo("PENDING_EXTERNAL_PROVIDER");
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE kind='TAX_INVOICE' AND payment_id=?",Integer.class,f.ready().fixture().payment())).isZero();
+  assertThat(taxExecute(f,prepared.data().path("id").asLong(),false).status()).isEqualTo(200);
+  assertThat(finance.submits).hasValue(0);assertThat(finance.lookups).hasValue(0);assertThat(fakeTax.requests).hasValue(0);
  }
  @Test void correctionIssuancePreservesOriginalAndDeduplicatesCancellation() throws Exception {
   var f=taxFlow();long original=id(taxPrepare(f,"original"));assertThat(taxExecute(f,original,false).data().path("state").asText()).isEqualTo("ISSUED");
@@ -707,17 +859,20 @@ class FinancialWorkflowMySqlIntegrationTest {
   assertThat(send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-documents/"+revised+"/reviews",Map.of("approve",true,"expected_version",0,"reason_code","REFUND_REVIEW"),null).data().path("state").asText()).isEqualTo("APPROVED");
   assertThat(taxPrepare(new TaxFlow(f.ready(),revised,changed),"new-snapshot").status()).isEqualTo(200);journalBalanced(f.ready());
  }
- @Test void processDeathAfterIssuanceRequestIsRecoveredWithoutReissue() throws Exception {
-  var f=taxFlow();long execution=id(taxPrepare(f,"crash"));var run=taxPersistence.claimAdmin(f.ready().admin(),execution,false);
-  fakeTax.request(run.request());((MutableClock)clock).advance(46);assertThat(taxExecution.runDue()).isGreaterThanOrEqualTo(1);
+ @Test void processDeathAfterCanonicalSubmissionIsRecoveredByLookupWithoutReissue() throws Exception {
+  var f=taxFlow();long execution=id(taxPrepare(f,"crash"));Long operation=taxPersistence.canonicalOperationId(f.ready().admin(),execution);
+  var run=persistenceFinance.claimAdmin(f.ready().admin(),operation,false);finance.submit(run.command());
+  int lookupsBefore=finance.lookups.get();finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.SUCCEEDED);((MutableClock)clock).advance(46);assertThat(taxExecution.runDue()).isGreaterThanOrEqualTo(1);
   var restored=send(f.ready().admin(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/tax-document-executions/"+execution,null,null);
-  assertThat(restored.data().path("state").asText()).isEqualTo("ISSUED");assertThat(fakeTax.requests).hasValue(1);
+  assertThat(restored.data().path("state").asText()).isEqualTo("ISSUED");assertThat(finance.submits).hasValue(1);assertThat(finance.lookups.get()).isGreaterThan(lookupsBefore);assertThat(fakeTax.requests).hasValue(0);
  }
  @Test void taxAmountMismatchIsUnknownAndCannotBeRetriedAsIssuance() throws Exception {
-  var f=taxFlow();long execution=id(taxPrepare(f,"wrong-evidence"));fakeTax.wrongAmount=true;
+  var f=taxFlow();long execution=id(taxPrepare(f,"wrong-evidence"));finance.submitFunction=c->new FinancialGateway.Evidence(c.reference(),"synthetic-tax-"+c.reference(),FinancialGateway.State.SUCCEEDED,BigDecimal.ONE,"KRW",false,false,FinancialGateway.NtsState.SUCCEEDED);
   assertThat(taxExecute(f,execution,false).data().path("state").asText()).isEqualTo("UNKNOWN");
-  assertThat(taxExecute(f,execution,false).status()).isEqualTo(409);fakeTax.wrongAmount=false;
-  assertThat(taxExecute(f,execution,true).data().path("state").asText()).isEqualTo("ISSUED");assertThat(fakeTax.requests).hasValue(1);
+  var repeated=taxExecute(f,execution,false);assertThat(repeated.status()).isEqualTo(200);
+  assertThat(repeated.data().path("state").asText()).isEqualTo("UNKNOWN");assertThat(finance.submits).hasValue(1);
+  finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.SUCCEEDED);
+  assertThat(taxExecute(f,execution,true).data().path("state").asText()).isEqualTo("ISSUED");assertThat(finance.submits).hasValue(1);assertThat(fakeTax.requests).hasValue(0);
  }
  @Test void profileReviewChangeInvalidatesPriorSettlementAndTaxApprovals() throws Exception {
   var f=taxFlow();var r=f.ready();long profile=send(r.fixture().expert(),UserTypeEnum.EXPERT,HttpMethod.GET,"/expert/me/settlement-profiles",null,null).data().get(0).path("id").asLong();
@@ -741,27 +896,32 @@ class FinancialWorkflowMySqlIntegrationTest {
   var other=order(PaymentMethod.CARD);assertThat(send(other.expert(),UserTypeEnum.EXPERT,HttpMethod.GET,"/expert/me/settlement-profiles/"+profile+"/reviews",null,null).status()).isEqualTo(403);
  }
  @Test void recoveryWorkersOnlyLookupAndAppendOneClaimPerPayout() throws Exception {
-  var r=financialFixture();long payout=reservedInternal(r,"worker-payout");fakePayout.next=PayoutProvider.State.UNKNOWN;
+  var r=financialFixture();long payout=reservedInternal(r,"worker-payout");finance.submitFunction=c->finance.evidence(c,FinancialGateway.State.UNKNOWN);
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/internal-payouts/"+payout+"/executions",null,null).status()).isEqualTo(200);
-  fakePayout.next=PayoutProvider.State.SUCCEEDED;((MutableClock)clock).advance(31);var pool=Executors.newFixedThreadPool(2);
-  try{var a=pool.submit(()->internalPayouts.runDue());var b=pool.submit(()->internalPayouts.runDue());a.get();b.get();}finally{pool.shutdownNow();}
-  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_audit_events WHERE payout_id=? AND code='LOOKUP_CLAIM'",Integer.class,payout)).isEqualTo(1);
-  assertThat(fakePayout.requests).hasValue(1);assertThat(balance(r).path("paid").decimalValue()).isEqualByComparingTo("900");journalBalanced(r);
+  finance.lookupFunction=c->finance.evidence(c,FinancialGateway.State.SUCCEEDED);((MutableClock)clock).advance(31);var pool=Executors.newFixedThreadPool(2);
+  try{var a=pool.submit(()->workflow.runDue());var b=pool.submit(()->workflow.runDue());a.get();b.get();}finally{pool.shutdownNow();}
+  long operation=jdbc.queryForObject("SELECT operation_id FROM payout_compatibility_links WHERE id=?",Long.class,payout);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operation_audits WHERE operation_id=? AND action='LOOKUP_CLAIM'",Integer.class,operation)).isEqualTo(1);
+  assertThat(fakePayout.requests).hasValue(0);assertThat(finance.submits).hasValue(1);assertThat(balance(r).path("paid").decimalValue()).isEqualByComparingTo("900");journalBalanced(r);
   var log=send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.GET,"/admin/internal-payouts/"+payout+"/events",null,null);assertThat(log.status()).isEqualTo(200);assertThat(log.data().size()).isGreaterThanOrEqualTo(5);
  }
  @Test void concurrentTaxExecutionRequestsCreateOneCanonicalInvoice() throws Exception {
   var f=taxFlow();var pool=Executors.newFixedThreadPool(2);
   try{var a=pool.submit(()->taxPrepare(f,"race-tax"));var b=pool.submit(()->taxPrepare(f,"race-tax"));var one=a.get();var two=b.get();assertThat(one.status()).isEqualTo(200);assertThat(two.status()).isEqualTo(200);assertThat(one.data().path("id").asLong()).isEqualTo(two.data().path("id").asLong());}finally{pool.shutdownNow();}
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_tax_invoices WHERE payment_id=?",Integer.class,f.ready().fixture().payment())).isEqualTo(1);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM internal_tax_executions WHERE document_id=?",Integer.class,f.document())).isEqualTo(1);
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE kind='TAX_INVOICE' AND payment_id=?",Integer.class,f.ready().fixture().payment())).isEqualTo(1);
  }
 
- @Test void legacyCanonicalInvoiceAlsoBlocksNewExecutionPath() throws Exception {
+ @Test void legacyInvoiceDraftPathLinksToInternalDocumentAndCanonicalExecution() throws Exception {
   var f=taxFlow();var r=f.ready();
   long settlement=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+r.fixture().payment()+"/settlement-drafts",null,null));
   long draft=id(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/settlement-drafts/"+settlement+"/tax-invoice-drafts",Map.of("kind","PLATFORM_TO_EXPERT"),"legacy-first"));
   var body=Map.of("supplier_snapshot_id",f.body().get("supplier_snapshot_id"),"recipient_snapshot_id",f.body().get("recipient_snapshot_id"),"supply",90,"vat",10,"taxation","TAXABLE","write_date","2026-01-01");
   assertThat(send(r.admin(),UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/tax-invoice-drafts/"+draft+"/invoices",body,null).status()).isEqualTo(200);
-  assertThat(taxPrepare(f,"new-bypass").status()).isEqualTo(409);assertThat(fakeTax.requests).hasValue(0);
+  var linked=taxPrepare(f,"new-bypass");assertThat(linked.status()).isEqualTo(200);
+  assertThat(jdbc.queryForObject("SELECT internal_document_id FROM financial_tax_invoices WHERE id=?",Long.class,linked.data().path("invoice_id").asLong())).isEqualTo(f.document());
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM financial_operations WHERE kind='TAX_INVOICE' AND payment_id=?",Integer.class,r.fixture().payment())).isEqualTo(1);assertThat(fakeTax.requests).hasValue(0);
  }
  @Test void taxExecutionAndAuditEndpointsRejectWrongRoles() throws Exception {
   var f=taxFlow();long execution=id(taxPrepare(f,"secure-execution"));var r=f.ready();

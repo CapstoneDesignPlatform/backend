@@ -1,6 +1,7 @@
 package com.capdi.backend.domain.payment.controller;
 import com.capdi.backend.domain.payment.dto.*;
 import com.capdi.backend.domain.payment.service.*;
+import com.capdi.backend.domain.payment.gateway.FinancialGateway;
 import com.capdi.backend.global.jwt.CustomUserDetails;
 import com.capdi.backend.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -14,7 +15,7 @@ import java.util.List;
 @RestController @RequiredArgsConstructor @RequestMapping("/admin") @PreAuthorize("hasRole('ADMIN')")
 public class FinancialExecutionController {
  private final PaymentExecutionService paymentExecution;
- private final FinancialWorkflowPersistenceService persistence;private final FinancialWorkflowService execution;
+ private final FinancialWorkflowPersistenceService persistence;private final FinancialWorkflowService execution;private final FinancialGateway gateway;
  @PostMapping("/payments/{paymentId}/settlements")
  public ResponseEntity<ApiResponse<FinancialWorkflowResponse>> initialize(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long paymentId){return ok(persistence.settlement(u.getUserId(),paymentId));}
  @GetMapping("/payments/{paymentId}/settlement")
@@ -26,7 +27,7 @@ public class FinancialExecutionController {
  @PostMapping("/payments/{paymentId}/payout-approvals")
  public ResponseEntity<ApiResponse<FinancialWorkflowResponse>> approve(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long paymentId,@Valid @RequestBody FinancialWorkflowRequests.PayoutDecision body){return ok(persistence.decidePayout(u.getUserId(),paymentId,body));}
  @GetMapping("/payments/{paymentId}/payout-approvals")
- public ResponseEntity<ApiResponse<List<FinancialWorkflowResponse>>> approvals(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long paymentId){return ResponseEntity.ok(ApiResponse.ok(persistence.approvalHistory(u.getUserId(),paymentId).stream().map(FinancialWorkflowResponse::approval).toList()));}
+ public ResponseEntity<ApiResponse<List<FinancialWorkflowResponse>>> approvals(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long paymentId){boolean payoutAvailable=gateway.canSubmit(FinancialGateway.Kind.PAYOUT);return ResponseEntity.ok(ApiResponse.ok(persistence.approvalHistory(u.getUserId(),paymentId).stream().map(a->FinancialWorkflowResponse.approval(a,payoutAvailable)).toList()));}
  @PostMapping("/payments/{paymentId}/payouts")
  public ResponseEntity<ApiResponse<FinancialWorkflowResponse>> payout(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long paymentId,@RequestHeader(value="Idempotency-Key",required=false) String key,@Valid @RequestBody FinancialWorkflowRequests.Execute body){return ok(persistence.preparePayout(u.getUserId(),paymentId,body.approvalId(),key));}
  @GetMapping("/financial-operations/{operationId}")

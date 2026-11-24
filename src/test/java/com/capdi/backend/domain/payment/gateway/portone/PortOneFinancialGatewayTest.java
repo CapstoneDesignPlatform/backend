@@ -20,6 +20,12 @@ class PortOneFinancialGatewayTest {
    if(replies.isEmpty())throw new FinancialGatewayException(FinancialGatewayException.Failure.TIMEOUT);
    return new PortOneFinancialTransport.Reply(200,replies.removeFirst().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));},mapper,EnumSet.allOf(FinancialGateway.Kind.class));
  }
+ PortOneFinancialGateway gatewayWithoutMerchant(){
+  var settings=new PortOneSettings(true,true,"SANDBOX",null,"store-test","channel-test","SYNTHETIC_API_SECRET",null,Duration.ofSeconds(3));
+  return new PortOneFinancialGateway(settings,(m,p,q,b,k)->{calls.add(new Call(m,p,q,b,k));
+   if(replies.isEmpty())throw new FinancialGatewayException(FinancialGatewayException.Failure.TIMEOUT);
+   return new PortOneFinancialTransport.Reply(200,replies.removeFirst().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));},mapper,EnumSet.allOf(FinancialGateway.Kind.class));
+ }
  ObjectNode node(String json){try{return (ObjectNode)mapper.readTree(json);}catch(Exception e){throw new AssertionError();}}
  FinancialGateway.Command refund(){
   return new FinancialGateway.Command(ref,FinancialGateway.Kind.REFUND,node("{\"paymentId\":\"capdi_test\",\"method\":\"CARD\",\"gross\":1000,\"amount\":100,\"previousRefunded\":0,\"currency\":\"KRW\"}"));
@@ -30,6 +36,17 @@ class PortOneFinancialGatewayTest {
     +"\"amount\":{\"total\":1000,\"cancelled\":0,\"discount\":0},\"cancellations\":[]}");
  }
  ObjectNode cancel(String status,int amount){return node("{\"status\":\""+status+"\",\"id\":\"cancel-test\",\"reason\":\""+ref+"\",\"totalAmount\":"+amount+"}");}
+ @Test void financeUsesStoreAccountIdentityAndAllowsAbsentExpectedMerchantPin(){
+  var unpinned=gatewayWithoutMerchant();
+  assertThat(unpinned.identity().merchant()).isNull();
+  assertThat(unpinned.identity().providerAccountId()).isEqualTo("provider:PORTONE_V2:store:store-test");
+  replies.add(payment());replies.add(mapper.createObjectNode().set("cancellation",cancel("REQUESTED",100)));
+  assertThat(unpinned.submit(refund()).state()).isEqualTo(FinancialGateway.State.PENDING);
+ }
+ @Test void financeStillRequiresWellFormedResponseMerchantWithoutConfiguredPin(){
+  var malformed=payment();malformed.put("merchantId","");replies.add(malformed);
+  assertThatThrownBy(()->gatewayWithoutMerchant().lookup(refund(),null)).isInstanceOf(FinancialGatewayException.class);
+ }
  @Test void refundUsesCancellableAmountAndStableReferenceBut200RequestedIsPending(){
   replies.add(payment());replies.add(mapper.createObjectNode().set("cancellation",cancel("REQUESTED",100)));
   assertThat(gateway.submit(refund()).state()).isEqualTo(FinancialGateway.State.PENDING);

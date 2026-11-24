@@ -21,14 +21,16 @@ public class InternalTaxService {
  private final InternalTaxExecutionPersistenceService execution;
  private final InternalTaxExecutionRepository executions;private final ExpertSettlementProfileRepository profiles;private final SettlementBalanceRepository balances;
  private final FinancialAuditEventRepository events;
+ private final SettlementCompletionGuard completionGuard;
  private final BillingPartySnapshotRepository parties;private final FinancialPolicy policy;private final EntityManager em;
  public record ItemView(int line_number,String item_code,BigDecimal supply,BigDecimal vat){}
  public record View(Long id,Long payment_id,Long original_document_id,PaymentTaxInvoiceDraft.Kind kind,
   InternalTaxDocument.State state,BigDecimal supply,BigDecimal vat,BigDecimal total,long version,
-  boolean legally_issued,boolean issuance_executable,FinancialGateway.NtsState nts_state,List<ItemView> items,boolean snapshot_current,Long revision_of_id,boolean superseded){}
+  boolean legally_issued,boolean issuance_executable,FinancialGateway.NtsState nts_state,List<ItemView> items,boolean snapshot_current,Long revision_of_id,boolean superseded,
+  Long financial_operation_id,String canonical_operation_state){}
  @Transactional public View create(Long admin,Long payment,String rawKey,InternalTaxRequests.Draft body){return createDraft(admin,payment,rawKey,body,null);}
  private View createDraft(Long admin,Long payment,String rawKey,InternalTaxRequests.Draft body,Long revisionOf){
-  role(admin);var p=payments.lockById(payment).orElseThrow(this::missing);em.refresh(p);if(p.getStatus()!=PaymentStatus.PAID)throw conflict();
+  role(admin);var p=payments.lockById(payment).orElseThrow(this::missing);em.refresh(p);if(p.getStatus()!=PaymentStatus.PAID)throw conflict();completionGuard.requireCompleted(p.getAnnouncementId());
   String key=PaymentProcessingKeys.requestKey(rawKey);
   String scope=revisionOf!=null?PaymentProcessingKeys.digest("REVISION:"+revisionOf+":"+key):PaymentProcessingKeys.digest(body.originalDocumentId()==null?"BASE:"+payment+":"+body.kind():"CORRECTION:"+body.originalDocumentId()+":"+key);
   String hash=PaymentProcessingKeys.digest(body.toString());
@@ -65,7 +67,7 @@ public class InternalTaxService {
   if(d.isSuperseded() || executions.findByDocumentId(id).isPresent())throw conflict();
   if(d.getVersion()!=request.expectedVersion()){if(d.getVersion()==request.expectedVersion()+1 && Objects.equals(d.getReviewerId(),admin) && Objects.equals(d.getReasonCode(),request.reasonCode()) && (request.approve()?d.getState()!=InternalTaxDocument.State.REJECTED:d.getState()==InternalTaxDocument.State.REJECTED))return view(d);throw conflict();}
   // Legal party authority, VAT and correction eligibility are not established by a local review.
-  try{d.review(admin,request.approve(),request.reasonCode(),execution.policyAllows(d,true));d.recordPolicy(policy.taxPolicyVersion());}catch(IllegalStateException ex){throw conflict();}
+  try{d.review(admin,request.approve(),request.reasonCode(),execution.documentReviewAllows(d,true));d.recordPolicy(policy.taxPolicyVersion());}catch(IllegalStateException ex){throw conflict();}
   documents.flush();events.save(FinancialAuditEvent.record(null,null,null,admin,"tax-review:"+d.getId()+":"+d.getVersion(),"DOCUMENT_REVIEW",d.getState().name()).document(d.getId()).evidence(request.reasonCode(),d.getRequestHash()));return view(d);
  }
 
@@ -90,8 +92,15 @@ public class InternalTaxService {
  public List<FinancialAuditEvent> history(Long admin,Long id){readRole(admin);documents.findById(id).orElseThrow(this::missing);return events.findByDocumentIdOrderByIdAsc(id);}
  public View read(Long admin,Long id){readRole(admin);return view(documents.findById(id).orElseThrow(this::missing));}
  public List<View> list(Long admin,Long payment){readRole(admin);return documents.findByPaymentIdOrderByIdDesc(payment).stream().map(this::view).toList();}
- private View view(InternalTaxDocument d){var result=executions.findByDocumentId(d.getId());boolean issued=result.map(e->e.getState()==InternalTaxExecution.State.ISSUED && !e.isTestIssuance() && "PRODUCTION".equals(e.getProviderEnvironment())).orElse(false);return new View(d.getId(),d.getPaymentId(),d.getOriginalDocumentId(),d.getKind(),d.getState(),d.getSupply(),d.getVat(),d.getTotal(),d.getVersion(),issued,d.getState()==InternalTaxDocument.State.APPROVED && result.map(e->!e.isDispatched()).orElse(true) && execution.policyAllows(d,false),result.map(e->FinancialGateway.NtsState.valueOf(e.getNtsState().name())).orElse(FinancialGateway.NtsState.NOT_SENT),
-  items.findByDocumentIdOrderByLineNumber(d.getId()).stream().map(i->new ItemView(i.getLineNumber(),i.getItemCode(),i.getSupply(),i.getVat())).toList(),execution.current(d,false),d.getRevisionOfId(),d.isSuperseded());}
+ private View view(InternalTaxDocument d){
+  var result=executions.findByDocumentId(d.getId());var run=result.map(execution::compatibilityView);
+  boolean issued=run.map(InternalTaxExecutionPersistenceService.View::legally_issued).orElse(false);
+  boolean executable=d.getState()==InternalTaxDocument.State.APPROVED && result.map(e->!e.isDispatched()).orElse(true) && execution.policyAllows(d,false);
+  var nts=run.map(v->FinancialGateway.NtsState.valueOf(v.nts_state().name())).orElse(FinancialGateway.NtsState.NOT_SENT);
+  return new View(d.getId(),d.getPaymentId(),d.getOriginalDocumentId(),d.getKind(),d.getState(),d.getSupply(),d.getVat(),d.getTotal(),d.getVersion(),issued,executable,nts,
+   items.findByDocumentIdOrderByLineNumber(d.getId()).stream().map(i->new ItemView(i.getLineNumber(),i.getItemCode(),i.getSupply(),i.getVat())).toList(),execution.current(d,false),d.getRevisionOfId(),d.isSuperseded(),
+   run.map(InternalTaxExecutionPersistenceService.View::financial_operation_id).orElse(null),run.map(InternalTaxExecutionPersistenceService.View::canonical_state).orElse("NOT_PREPARED"));
+ }
  private void readRole(Long user){if(user==null || !"ADMIN".equals(sources.userType(user,false).orElse("")))throw new CustomException(ErrorCode.FORBIDDEN);}
  private void role(Long user){if(user==null || !"ADMIN".equals(sources.userType(user,true).orElse("")))throw new CustomException(ErrorCode.FORBIDDEN);}
  private CustomException missing(){return new CustomException(ErrorCode.NOT_FOUND);}

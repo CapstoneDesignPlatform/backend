@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Duration;
 import static org.assertj.core.api.Assertions.*;
 
 class PaymentGatewaySafetyTest {
@@ -48,12 +49,16 @@ class PaymentGatewaySafetyTest {
         a.claim(now.plusSeconds(31));assertThat(a.tokenMatches(token)).isFalse();
     }
     @Test void inboxLeasePreventsConcurrentAndDuplicateProcessing() {
-        var e=PaymentWebhookEvent.receive(6L,"TEST_FAKE","synthetic",PaymentEnvironment.TEST,"hash","digest");
         Instant now=Instant.parse("2026-01-01T00:00:00Z");
-        assertThat(e.claim("first",now)).isTrue();assertThat(e.claim("second",now)).isFalse();
-        assertThat(e.claim("second",now.plusSeconds(31))).isTrue();e.finish("first",true);
-        assertThat(e.getState()).isEqualTo(PaymentWebhookEvent.State.PROCESSING);e.finish("second",true);
-        assertThat(e.claim("third",now.plusSeconds(100))).isFalse();
+        var e=PaymentWebhookEvent.receive(6L,"TEST_FAKE","synthetic",PaymentEnvironment.TEST,"hash","digest",now);
+        assertThat(e.claim("first",now,Duration.ofSeconds(60),5)).isTrue();
+        assertThat(e.getAttemptCount()).isEqualTo(1);
+        assertThat(e.claim("second",now,Duration.ofSeconds(60),5)).isFalse();
+        assertThat(e.claim("second",now.plusSeconds(61),Duration.ofSeconds(60),5)).isTrue();
+        assertThat(e.finish("first",now.plusSeconds(62),PaymentWebhookEvent.Outcome.SUCCESS,null,5,Duration.ofSeconds(30))).isFalse();
+        assertThat(e.getState()).isEqualTo(PaymentWebhookEvent.State.PROCESSING);
+        assertThat(e.finish("second",now.plusSeconds(62),PaymentWebhookEvent.Outcome.SUCCESS,null,5,Duration.ofSeconds(30))).isTrue();
+        assertThat(e.claim("third",now.plusSeconds(100),Duration.ofSeconds(60),5)).isFalse();
     }
 
     @Test void gatewayWithoutLookupCannotStartFinancialExecution() {

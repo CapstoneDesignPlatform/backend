@@ -16,6 +16,12 @@ public class InternalTaxDocument extends BaseTimeEntity {
  public void captureProfile(Long profile){profileId=profile;}
  public void refreshSource(long balance,Long profile){balanceVersion=balance;profileId=profile;state=State.POLICY_HOLD;reviewerId=null;reasonCode=null;reviewedPolicyVersion=null;}
  @Column(name="revision_of_id",updatable=false) private Long revisionOfId;
+ @Column(name="financial_invoice_id",unique=true) private Long financialInvoiceId;
+ public void linkFinancialInvoice(Long invoice){
+  if(invoice==null || financialInvoiceId!=null && !financialInvoiceId.equals(invoice))
+   throw new IllegalStateException("Financial invoice link is immutable");
+  financialInvoiceId=invoice;
+ }
  @Column(nullable=false) private boolean superseded;
  public void revisionOf(Long id){revisionOfId=id;}
  public void supersede(){superseded=true;}

@@ -25,6 +25,8 @@ public class FinancialReviewService {
     private final BusinessRegistrationInfoRepository business;
     private final ExpertFileRepository files;
     private final EntityManager em;
+    private final SettlementCompletionGuard completionGuard;
+    private final FinancialWorkflowPersistenceService canonical;
     @Transactional
     public FinancialReviewResponse requestRefund(Long user,Long payment,String key,BigDecimal amount) {
         return createRefund(user,payment,key,amount,false);
@@ -80,6 +82,8 @@ public class FinancialReviewService {
     @Transactional
     public FinancialReviewResponse createSettlement(Long admin,Long payment) {
         role(admin,"ADMIN",true);var p=payment(payment,true);
+        completionGuard.requireCompleted(p.getAnnouncementId());
+        canonical.settlement(admin,payment);
         var old=settlements.findByPaymentId(payment);if(old.isPresent())return settlement(old.get());
         if(p.getStatus()!=PaymentStatus.PAID || !refunds.findByPaymentId(payment).isEmpty())throw conflict();
         return settlement(settlements.saveAndFlush(PaymentSettlementDraft.create(p)));
@@ -91,7 +95,7 @@ public class FinancialReviewService {
     public FinancialReviewResponse createTax(Long admin,Long settlement,String key,PaymentTaxInvoiceDraft.Kind kind,Long original) {
         role(admin,"ADMIN",true);
         var d=settlements.findById(settlement).orElseThrow(this::missing);
-        payment(d.getPaymentId(),true);em.refresh(d,LockModeType.PESSIMISTIC_WRITE);
+        var p=payment(d.getPaymentId(),true);completionGuard.requireCompleted(p.getAnnouncementId());em.refresh(d,LockModeType.PESSIMISTIC_WRITE);
         String hash=PaymentProcessingKeys.requestKey(key);
         var old=taxes.findBySettlementIdAndRequestKeyHash(settlement,hash);
         if(old.isPresent()) {

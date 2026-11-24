@@ -144,8 +144,10 @@ class PaymentOrderMySqlIntegrationTest {
         assertThat(r.data().path("status").asText()).isEqualTo("CREATED");
         assertThat(r.data().path("created_at").asText()).isNotBlank();
         assertThat(r.data().properties()).extracting(Map.Entry::getKey).containsExactlyInAnyOrder(
-                "payment_id","order_id","announcement_code","bid_id","amount","currency","status","created_at");
+                "payment_id","order_id","announcement_code","bid_id","selection_round","amount","currency","status","created_at");
+        assertThat(r.data().path("selection_round").asLong()).isEqualTo(1L);
         Payment p=payments.findById(id).orElseThrow();
+        assertThat(p.getSelectionRound()).isEqualTo(1L);
         assertThat(p.getClientUserId()).isEqualTo(f.client());assertThat(p.getExpertProfileId()).isEqualTo(f.expertProfile());
         assertThat(p.getAnnouncementId()).isEqualTo(f.announcement());assertThat(p.getVersion()).isZero();
         assertThat(p.getPlatformFeeRate()).isEqualByComparingTo("0.1000");
@@ -284,9 +286,9 @@ class PaymentOrderMySqlIntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
     @Test void fullFlywayAndHibernateSchemaValidate() {
-        assertThat(flyway.info().applied()).hasSize(27);
+        assertThat(flyway.info().applied()).hasSize(32);
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,27).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,32).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(entityManager.getEntityManagerFactory().getMetamodel().getEntities())
                 .extracting(t->t.getJavaType().getName()).contains(Payment.class.getName(),PaymentAttempt.class.getName(),PaymentIdempotencyKey.class.getName());

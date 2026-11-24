@@ -46,5 +46,5 @@ public class FinancialCompletionController {
  @GetMapping("/admin/tax-documents/{id}/events") @PreAuthorize("hasRole('ADMIN')")
  public ResponseEntity<ApiResponse<List<Event>>> documentEvents(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long id){return ResponseEntity.ok(ApiResponse.ok(documents.history(u.getUserId(),id).stream().map(Event::from).toList()));}
  @GetMapping("/admin/internal-payouts/{id}/events") @PreAuthorize("hasRole('ADMIN')")
- public ResponseEntity<ApiResponse<List<Event>>> payoutEvents(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long id){return ResponseEntity.ok(ApiResponse.ok(payouts.history(u.getUserId(),id).stream().map(Event::from).toList()));}
+ public ResponseEntity<ApiResponse<List<InternalPayoutPersistenceService.Event>>> payoutEvents(@AuthenticationPrincipal CustomUserDetails u,@PathVariable Long id){return ResponseEntity.ok(ApiResponse.ok(payouts.history(u.getUserId(),id)));}
 }

@@ -261,6 +261,32 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(payments.findById(f.payment()).orElseThrow().getPaidAt()).isNull();
         assertThat(progress(f)).isEqualTo("STEP_3_EXPERT_SELECTION");
     }
+    @Test void responseMismatchIsRecoveredByExplicitLookupWithoutRepeatingConfirmation() throws Exception {
+        Fixture f=order(PaymentMethod.CARD);long a=ready(f);
+        fake.confirmFunction=r->new PaymentGateway.Observation(r.identity(),r.orderId(),r.amount(),"USD",
+                "synthetic-tx-"+r.attemptKey(),"PAID",PaymentGateway.State.PAID,true);
+        Reply mismatch=confirm(f,a,"browser-reference");
+        assertThat(mismatch.data().path("payment_status").asText()).isEqualTo("UNKNOWN");
+        assertThat(mismatch.data().path("failure").asText()).isEqualTo("RESPONSE_MISMATCH");
+        assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(fake.confirms).hasValue(1);
+
+        // Same confirmation is an idempotent replay and must not make another provider call.
+        assertThat(confirm(f,a,"browser-reference").data().path("status").asText()).isEqualTo("UNKNOWN");
+        assertThat(fake.confirms).hasValue(1);
+        assertThat(fake.fetches).hasValue(0);
+
+        fake.fetchFunction=r->new PaymentGateway.Observation(r.identity(),r.orderId(),r.amount(),r.currency(),
+                "synthetic-tx-"+r.attemptKey(),"PAID",PaymentGateway.State.PAID,true);
+        Reply recovered=reconcile(f,a);
+        assertThat(recovered.data().path("payment_status").asText()).isEqualTo("PAID");
+        assertThat(recovered.data().path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(recovered.data().path("failure").asText()).isEqualTo("NONE");
+        assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(attempts.findById(a).orElseThrow().getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(fake.confirms).hasValue(1);
+        assertThat(fake.fetches).hasValue(1);
+    }
     @Test void duplicateProviderTransactionIsNotAssignedToTwoPayments() throws Exception {
         Fixture one=order(PaymentMethod.CARD),two=order(PaymentMethod.CARD);long a=ready(one),b=ready(two);
         fake.confirmFunction=r->new PaymentGateway.Observation(r.identity(),r.orderId(),r.amount(),r.currency(),
@@ -383,10 +409,14 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(fake.prepares).hasValue(0);assertThat(fake.confirms).hasValue(0);assertThat(fake.fetches.get()).isGreaterThanOrEqualTo(1);
     }
-    @Test void allEntitiesValidateAgainstV26AndCoreIsStillProviderNeutral() {
+    @Test void allEntitiesValidateAgainstV32AndCoreIsStillProviderNeutral() {
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,27).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,32).mapToObj(String::valueOf).toList());
         flyway.validate();
+        assertThat(jdbc.queryForObject("SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='payment_attempts' AND column_name='merchant_id'",String.class)).isEqualTo("YES");
+        assertThat(jdbc.queryForObject("SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='payment_webhook_events' AND column_name='merchant_id'",String.class)).isEqualTo("YES");
+        assertThat(jdbc.queryForObject("SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='financial_operations' AND column_name='provider_merchant_id'",String.class)).isEqualTo("YES");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND column_name='provider_account_id' AND table_name IN ('payment_attempts','payment_webhook_events','financial_operations')",Integer.class)).isEqualTo(3);
         assertThat(em.getEntityManagerFactory().getMetamodel().getEntities()).extracting(t->t.getJavaType().getName())
                 .contains(PaymentWebhookEvent.class.getName(),PaymentReconciliationJob.class.getName());
     }
@@ -449,6 +479,7 @@ class PaymentProcessingMySqlIntegrationTest {
             assertThat(events.findById(receipt.id()).orElseThrow().getState()).isEqualTo(PaymentWebhookEvent.State.RECEIVED);
             assertThat(fake.fetches).hasValue(0);
             release.countDown();assertThat(completing.get(15,TimeUnit.SECONDS).data().path("payment_status").asText()).isEqualTo("PAID");
+            ((MutableClock)clock).advance(30); // honor the persisted first transient retry delay
             webhooks.process(receipt.id());
             assertThat(events.findById(receipt.id()).orElseThrow().getState()).isEqualTo(PaymentWebhookEvent.State.PROCESSED);
             assertThat(fake.confirms).hasValue(1);assertThat(fake.fetches).hasValue(1);
@@ -543,7 +574,7 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(send(f.expert(),UserTypeEnum.CLIENT,HttpMethod.POST,"/payments/"+f.payment()+"/refund-requests",Map.of("amount",100),"fake-role").status()).isEqualTo(403);
     }
     @Test void settlementAndTaxDraftsNeverAuthorizePayoutOrIssuance() throws Exception {
-        var f=order(PaymentMethod.CARD);paid(f);long admin=admin();
+        var f=order(PaymentMethod.CARD);paid(f);progress(f,"STEP_7_COMPLETED");long admin=admin();
         var s=send(admin,UserTypeEnum.ADMIN,HttpMethod.POST,"/admin/payments/"+f.payment()+"/settlement-drafts",null,null);
         assertThat(s.status()).isEqualTo(200);assertThat(s.data().path("platform_amount").decimalValue()).isEqualByComparingTo("100");
         assertThat(s.data().path("expert_amount").decimalValue()).isEqualByComparingTo("900");
