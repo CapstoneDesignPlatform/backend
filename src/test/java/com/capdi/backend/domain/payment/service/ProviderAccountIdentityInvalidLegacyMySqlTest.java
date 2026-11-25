@@ -15,7 +15,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Proves malformed legacy webhook identity fails closed on an isolated disposable V28 schema. */
+/** Proves malformed legacy webhook identity fails closed on an isolated disposable V29 schema. */
 @Testcontainers
 @Tag("mysql-integration")
 class ProviderAccountIdentityInvalidLegacyMySqlTest {
@@ -28,9 +28,9 @@ class ProviderAccountIdentityInvalidLegacyMySqlTest {
             .withLabel("capdi.test.scope", "provider-account-identity-invalid-legacy-isolated");
 
     @Test
-    void v29RejectsWebhookWhoseAttemptHasNoLegacyIdentity() throws Exception {
+    void v30RejectsWebhookWhoseAttemptHasNoLegacyIdentity() throws Exception {
         Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
-                .target("28").load().migrate();
+                .target("29").load().migrate();
 
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement()) {
@@ -61,11 +61,11 @@ class ProviderAccountIdentityInvalidLegacyMySqlTest {
         var latest = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()).load();
         assertThatThrownBy(latest::migrate).isInstanceOf(FlywayException.class);
 
-        // MySQL DDL may have committed earlier V29 steps. Do not repair or retry here;
-        // verify only that the migration did not report V29 as successfully applied.
+        // MySQL DDL may have committed earlier V30 steps. Do not repair or retry here;
+        // verify only that the migration did not report V30 as successfully applied.
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement();
-             var rows = statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE version='29' AND success=1")) {
+             var rows = statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE version='30' AND success=1")) {
             assertThat(rows.next()).isTrue();
             assertThat(rows.getInt(1)).isZero();
         }

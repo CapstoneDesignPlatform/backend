@@ -44,6 +44,10 @@ public enum ErrorCode {
     INVALID_SIGNUP_ROLE(HttpStatus.BAD_REQUEST, "해당 역할로는 회원가입이 불가합니다."),
     EXPERT_BUSINESS_NAME_REQUIRED(HttpStatus.BAD_REQUEST, "전문가 회원가입 시 업체명은 필수입니다."),
     EXPERT_NOT_APPROVED(HttpStatus.FORBIDDEN, "승인되지 않은 전문가입니다."),
+    KAKAO_LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "카카오 로그인에 실패했습니다. 다시 시도해주세요."),
+    KAKAO_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "카카오 로그인 서비스에 일시적으로 연결할 수 없습니다."),
+    SOCIAL_ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 카카오 계정입니다."),
+    SOCIAL_LOGIN_ONLY(HttpStatus.UNAUTHORIZED, "카카오 로그인으로 가입한 계정입니다. 카카오로 로그인해주세요."),
 
     // 전문가
     EXPERT_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "전문가 프로필을 찾을 수 없습니다."),

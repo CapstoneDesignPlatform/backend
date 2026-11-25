@@ -37,3 +37,8 @@ jwt:
   secret: ${JWT_SECRET:local-test-secret-key-1234567890}
   expiration: 1800000
   refresh-expiration: 604800000
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID:}
+  client-secret: ${KAKAO_CLIENT_SECRET:}
+  redirect-uri: ${KAKAO_REDIRECT_URI:}

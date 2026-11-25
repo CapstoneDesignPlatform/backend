@@ -75,7 +75,7 @@ class FullSchemaValidationMySqlTest {
     @MockitoBean GoogleVisionOcrClient vision;
     @MockitoBean NtsHttpTransport nts;
 
-    @Test void fullApplicationContextValidatesEveryEntityAgainstFlywayV1ThroughV32() throws Exception {
+    @Test void fullApplicationContextValidatesEveryEntityAgainstFlywayV1ThroughV33() throws Exception {
         assertThat(context.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(context.getBeansOfType(Repository.class)).hasSize(42);
         var scanner = new ClassPathScanningCandidateComponentProvider(false);
@@ -86,7 +86,7 @@ class FullSchemaValidationMySqlTest {
                 .map(type -> type.getJavaType().getName()).toList();
         assertThat(discovered).isNotEmpty();assertThat(mapped).containsExactlyInAnyOrderElementsOf(discovered);
         assertThat(Arrays.stream(flyway.info().applied()).map(info -> info.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1, 32).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, 33).mapToObj(String::valueOf).toList());
         flyway.validate();
         try (var connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo("capdi52_full_schema_test");
@@ -105,7 +105,7 @@ class FullSchemaValidationMySqlTest {
         verifyNoInteractions(vision, nts);
     }
 
-    @Test void v29DisabledApplicationHealthIsUpWithoutProviderActivation() {
+    @Test void v30DisabledApplicationHealthIsUpWithoutProviderActivation() {
         var response = http.getForEntity("http://127.0.0.1:" + port + "/api/actuator/health", String.class);
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("\"status\":\"UP\"");

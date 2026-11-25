@@ -130,11 +130,11 @@ class ExpertFileMySqlIntegrationTest {
         assertThat(MYSQL.getContainerInfo().getHostConfig().getTmpFs()).containsKey("/var/lib/mysql");
         assertThat(MYSQL.getContainerInfo().getConfig().getLabels()).doesNotContainKey("com.docker.compose.project");
         assertThat(flyway.info().pending()).isEmpty();
-        assertThat(flyway.info().applied()).hasSize(32);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("32");
+        assertThat(flyway.info().applied()).hasSize(33);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("33");
         flyway.validate();
         System.out.println("ISOLATED_MYSQL container=" + MYSQL.getContainerId() + " url=" + MYSQL.getJdbcUrl()
-                + " transactionManager=" + manager.getClass().getSimpleName() + " migrations=32");
+                + " transactionManager=" + manager.getClass().getSimpleName() + " migrations=33");
     }
 
     @Test

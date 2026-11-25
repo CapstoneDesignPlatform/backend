@@ -409,9 +409,9 @@ class PaymentProcessingMySqlIntegrationTest {
         assertThat(payments.findById(f.payment()).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(fake.prepares).hasValue(0);assertThat(fake.confirms).hasValue(0);assertThat(fake.fetches.get()).isGreaterThanOrEqualTo(1);
     }
-    @Test void allEntitiesValidateAgainstV32AndCoreIsStillProviderNeutral() {
+    @Test void allEntitiesValidateAgainstV33AndCoreIsStillProviderNeutral() {
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,32).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,33).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(jdbc.queryForObject("SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='payment_attempts' AND column_name='merchant_id'",String.class)).isEqualTo("YES");
         assertThat(jdbc.queryForObject("SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='payment_webhook_events' AND column_name='merchant_id'",String.class)).isEqualTo("YES");

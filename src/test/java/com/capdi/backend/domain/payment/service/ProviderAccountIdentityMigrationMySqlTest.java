@@ -15,7 +15,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Verifies V29 backfills against disposable V28 rows without touching a persistent database. */
+/** Verifies V30 backfills against disposable V29 rows without touching a persistent database. */
 @Testcontainers
 @Tag("mysql-integration")
 class ProviderAccountIdentityMigrationMySqlTest {
@@ -28,9 +28,9 @@ class ProviderAccountIdentityMigrationMySqlTest {
             .withLabel("capdi.test.scope", "provider-account-identity-migration-isolated");
 
     @Test
-    void v29PreservesMerchantValuesAndBackfillsNamespacedAccountIdentity() throws Exception {
+    void v30PreservesMerchantValuesAndBackfillsNamespacedAccountIdentity() throws Exception {
         Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
-                .target("28").load().migrate();
+                .target("29").load().migrate();
 
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement()) {
@@ -75,11 +75,11 @@ class ProviderAccountIdentityMigrationMySqlTest {
 
         var latest = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()).load();
         latest.migrate();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("32");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("33");
         latest.migrate(); // Applying the current schema again must be a no-op.
         try (var connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
              var statement = connection.createStatement();
-             var rows = statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE version='29' AND success=1")) {
+             var rows = statement.executeQuery("SELECT COUNT(*) FROM flyway_schema_history WHERE version='30' AND success=1")) {
             assertThat(rows.next()).isTrue();
             assertThat(rows.getInt(1)).isEqualTo(1);
         }
