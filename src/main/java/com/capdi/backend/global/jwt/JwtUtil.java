@@ -2,7 +2,6 @@ package com.capdi.backend.global.jwt;
 
 import com.capdi.backend.domain.user.entity.UserTypeEnum;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -51,22 +50,6 @@ public class JwtUtil {
 
     public Long getUserId(String token) {
         return Long.parseLong(parseClaims(token).getSubject());
-    }
-
-    public Long getUserIdIgnoringExpiry(String token) {
-        return Long.parseLong(parseClaimsIgnoringExpiry(token).getSubject());
-    }
-
-    public String getRoleIgnoringExpiry(String token) {
-        return parseClaimsIgnoringExpiry(token).get("role", String.class);
-    }
-
-    private Claims parseClaimsIgnoringExpiry(String token) {
-        try {
-            return parseClaims(token);
-        } catch (ExpiredJwtException e) {
-            return e.getClaims();
-        }
     }
 
     public String getRole(String token) {

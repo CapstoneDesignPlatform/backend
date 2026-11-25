@@ -385,7 +385,7 @@ class PaymentProcessingMySqlIntegrationTest {
     }
     @Test void allEntitiesValidateAgainstV26AndCoreIsStillProviderNeutral() {
         assertThat(Arrays.stream(flyway.info().applied()).map(i->i.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1,27).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1,28).mapToObj(String::valueOf).toList());
         flyway.validate();
         assertThat(em.getEntityManagerFactory().getMetamodel().getEntities()).extracting(t->t.getJavaType().getName())
                 .contains(PaymentWebhookEvent.class.getName(),PaymentReconciliationJob.class.getName());
