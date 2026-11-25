@@ -121,7 +121,7 @@ class AuthPublicEndpointContractTest {
     @Test void expertBusinessNameRequiredByRealServiceBeforeDatabaseAccess() throws Exception {
         var users=mock(UserRepository.class);var tokens=mock(RefreshTokenRepository.class);var clients=mock(ClientRepository.class);
         var provisioning=mock(ExpertProfileProvisioningService.class);var encoder=mock(PasswordEncoder.class);
-        var actual=new AuthService(users,tokens,clients,provisioning,encoder,jwt);
+        var actual=new AuthService(users,tokens,clients,provisioning,encoder,jwt,mock(com.capdi.backend.domain.auth.client.KakaoOidcClient.class));
         var body=signup();body.put("businessName"," ");
         var dto=mapper.convertValue(body,SignupRequest.class);
         var failure=catchThrowableOfType(()->actual.signup(dto),CustomException.class);

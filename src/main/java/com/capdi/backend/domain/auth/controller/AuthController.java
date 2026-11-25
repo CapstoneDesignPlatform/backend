@@ -1,6 +1,9 @@
 package com.capdi.backend.domain.auth.controller;
 
 import com.capdi.backend.domain.auth.dto.AuthTokens;
+import com.capdi.backend.domain.auth.dto.KakaoLoginRequest;
+import com.capdi.backend.domain.auth.dto.KakaoLoginResponse;
+import com.capdi.backend.domain.auth.dto.KakaoSignupRequest;
 import com.capdi.backend.domain.auth.dto.LoginRequest;
 import com.capdi.backend.domain.auth.dto.LoginResponse;
 import com.capdi.backend.domain.auth.dto.SignupRequest;
@@ -40,6 +43,20 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthTokens tokens = authService.login(request);
         return ResponseEntity.ok(ApiResponse.ok("로그인 성공.", LoginResponse.of(tokens)));
+    }
+
+    @PostMapping("/kakao/login")
+    @Operation(summary = "카카오 로그인", description = "인가 코드로 로그인. 미가입이면 registered=false와 signupToken(10분) 반환")
+    public ResponseEntity<ApiResponse<KakaoLoginResponse>> kakaoLogin(@Valid @RequestBody KakaoLoginRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("카카오 로그인 성공.", authService.kakaoLogin(request)));
+    }
+
+    @PostMapping("/kakao/signup")
+    @Operation(summary = "카카오 회원가입", description = "signupToken과 직접 입력한 회원 정보로 가입 후 바로 로그인 토큰 발급")
+    public ResponseEntity<ApiResponse<LoginResponse>> kakaoSignup(@Valid @RequestBody KakaoSignupRequest request) {
+        AuthTokens tokens = authService.kakaoSignup(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("회원가입이 완료되었습니다.", LoginResponse.of(tokens)));
     }
 
     @PostMapping("/refresh")
