@@ -99,22 +99,6 @@ public class JwtUtil {
         return Long.parseLong(parseClaims(token).getSubject());
     }
 
-    public Long getUserIdIgnoringExpiry(String token) {
-        return Long.parseLong(parseClaimsIgnoringExpiry(token).getSubject());
-    }
-
-    public String getRoleIgnoringExpiry(String token) {
-        return parseClaimsIgnoringExpiry(token).get("role", String.class);
-    }
-
-    private Claims parseClaimsIgnoringExpiry(String token) {
-        try {
-            return parseClaims(token);
-        } catch (ExpiredJwtException e) {
-            return e.getClaims();
-        }
-    }
-
     public String getRole(String token) {
         return parseClaims(token).get("role", String.class);
     }

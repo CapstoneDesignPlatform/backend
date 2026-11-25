@@ -85,6 +85,34 @@ class AuthPublicEndpointContractTest {
     @Test void emptyLoginIsValidation400Not401() throws Exception {
         assertThat(send("/auth/login",Map.of()).getResponse().getStatus()).isEqualTo(400);verifyNoInteractions(service);
     }
+    @Test void refreshWithoutAccessTokenUsesRawTokenBodyAndReturnsLoginContract() throws Exception {
+        when(service.refresh("old-refresh")).thenReturn(new AuthTokens("new-access","new-refresh","EXPERT",null));
+        var response=send("/auth/refresh",Map.of("refreshToken","old-refresh")).getResponse();
+        assertThat(response.getStatus()).isEqualTo(200);
+        var data=mapper.readTree(response.getContentAsString()).path("data");
+        assertThat(data.path("accessToken").asText()).isEqualTo("new-access");
+        assertThat(data.path("refreshToken").asText()).isEqualTo("new-refresh");
+        assertThat(data.path("role").asText()).isEqualTo("EXPERT");
+        verify(service).refresh("old-refresh");
+    }
+    @Test void emptyRefreshIsValidation400Not401() throws Exception {
+        assertThat(send("/auth/refresh",Map.of()).getResponse().getStatus()).isEqualTo(400);
+        verifyNoInteractions(service);
+    }
+    @Test void logoutWithoutAccessTokenPassesRawRefreshTokenForRevocation() throws Exception {
+        assertThat(send("/auth/logout",Map.of("refreshToken","old-refresh")).getResponse().getStatus()).isEqualTo(200);
+        verify(service).logout(null,"old-refresh");
+    }
+    @Test void kakaoLoginWithoutAuthorizationReturnsRegisteredSession() throws Exception {
+        when(service.kakaoLogin(any())).thenReturn(KakaoLoginResponse.registered(
+                new AuthTokens("kakao-access","kakao-refresh","EXPERT",null)));
+        var response=send("/auth/kakao/login",Map.of("code","code","codeVerifier","v".repeat(43),
+                "nonce","n".repeat(16))).getResponse();
+        assertThat(response.getStatus()).isEqualTo(200);
+        var data=mapper.readTree(response.getContentAsString()).path("data");
+        assertThat(data.path("registered").asBoolean()).isTrue();
+        assertThat(data.path("refreshToken").asText()).isEqualTo("kakao-refresh");
+    }
     @Test void emptySignupIsValidation400Not401() throws Exception {
         assertThat(send("/auth/signup",Map.of()).getResponse().getStatus()).isEqualTo(400);verifyNoInteractions(service);
     }
