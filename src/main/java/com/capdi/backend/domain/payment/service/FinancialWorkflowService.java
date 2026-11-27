@@ -16,6 +16,11 @@ public class FinancialWorkflowService {
   for(Long id:persistence.due())try {var run=persistence.claimWorker(id);if(run.execute()){call(run,true,null);count++;}}catch(RuntimeException ignored){}
   return count;
  }
+ public int runDueTaxInvoices(){
+  int count=0;
+  for(Long id:persistence.due(FinancialGateway.Kind.TAX_INVOICE))try {var run=persistence.claimWorker(id);if(run.execute()){call(run,true,null);count++;}}catch(RuntimeException ignored){}
+  return count;
+ }
  private FinancialWorkflowResponse call(FinancialWorkflowPersistenceService.Run run,boolean lookup,Long actor) {
   if(!run.execute())return actor==null?null:persistence.readAdmin(actor,run.operation());
   FinancialGateway.Evidence result;

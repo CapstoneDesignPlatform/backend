@@ -54,6 +54,7 @@ public class PaymentAttempt extends BaseTimeEntity {
     @Column(name="confirmation_hash",length=64) private String confirmationHash;
     @Column(name="provider_code",nullable=false,length=40) private String providerCode="DISABLED";
     @Column(name="merchant_id",length=100) private String merchantId;
+    @Column(name="provider_account_id",length=200,updatable=false) private String providerAccountId;
     @Enumerated(EnumType.STRING) @Column(nullable=false,length=20) private PaymentEnvironment environment=PaymentEnvironment.DISABLED;
     @Column(name="provider_transaction_id",length=200) private String providerTransactionId;
     @Column(name="provider_raw_status",length=80) private String providerRawStatus;
@@ -64,7 +65,7 @@ public class PaymentAttempt extends BaseTimeEntity {
     public static PaymentAttempt start(Payment p,int number,String key,
             com.capdi.backend.domain.payment.gateway.PaymentGateway.Identity identity,java.time.Instant now) {
         var a=prepare(p,number);a.requestKeyHash=key;a.provider=PaymentProvider.ADAPTER;
-        a.providerCode=identity.code();a.merchantId=identity.merchant();a.environment=identity.environment();a.claim(now);return a;
+        a.providerCode=identity.code();a.merchantId=identity.merchant();a.providerAccountId=identity.providerAccountId();a.environment=identity.environment();a.claim(now);return a;
     }
     public String claim(java.time.Instant now) {
         if(busy(now))throw new IllegalStateException("Payment execution already leased");
@@ -74,6 +75,7 @@ public class PaymentAttempt extends BaseTimeEntity {
     public boolean tokenMatches(String token) {return token!=null && token.equals(executionToken);}
     public void confirming(String hash) {confirmationHash=hash;status=PaymentAttemptStatus.REQUESTED;}
     public void observed(com.capdi.backend.domain.payment.gateway.PaymentGateway.Observation result) {
+        if(result.providerMerchantId()!=null)merchantId=result.providerMerchantId();
         if(result.transactionId()!=null)providerTransactionId=result.transactionId();
         providerRawStatus=result.rawStatus();failure=PaymentProcessingFailure.NONE;
         status=switch(result.state()) {
@@ -93,7 +95,7 @@ public class PaymentAttempt extends BaseTimeEntity {
     }
     public com.capdi.backend.domain.payment.gateway.PaymentGateway.Reference reference() {
         return new com.capdi.backend.domain.payment.gateway.PaymentGateway.Reference(
-                new com.capdi.backend.domain.payment.gateway.PaymentGateway.Identity(providerCode,merchantId,environment),
+                new com.capdi.backend.domain.payment.gateway.PaymentGateway.Identity(providerCode,merchantId,environment,providerAccountId),
                 orderId,attemptKey,providerTransactionId,chargeAmount,currency,method);
     }
 }

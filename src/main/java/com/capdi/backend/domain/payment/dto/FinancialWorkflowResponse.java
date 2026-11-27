@@ -15,6 +15,7 @@ public class FinancialWorkflowResponse {
  private Long version;
  @JsonProperty("submit_claimed") private Boolean submitClaimed;
  @JsonProperty("approval_decision") private FinancialApproval.Decision approvalDecision;
+ @JsonProperty("execution_state") private String executionState;
  @JsonProperty("reason_code") private String reasonCode;
  @JsonProperty("admin_user_id") private Long adminUserId;
  @JsonProperty("balance_version") private Long balanceVersion;
@@ -46,9 +47,12 @@ public class FinancialWorkflowResponse {
    .gross(b.getGross()).refunded(b.getRefunded()).net(b.net()).platform(b.platform()).expert(b.expert())
    .reserved(b.getReserved()).paid(b.getPaid()).available(b.available()).recoverable(b.getRecoverable()).held(b.isHeld()).build();
  }
- public static FinancialWorkflowResponse approval(FinancialApproval a) {
+ public static FinancialWorkflowResponse approval(FinancialApproval a) { return approval(a,true); }
+ public static FinancialWorkflowResponse approval(FinancialApproval a,boolean payoutProviderAvailable) {
   return builder().id(a.getId()).type(a.getKind().name()+"_APPROVAL").state(a.getDecision().name()).version(a.getVersion())
-   .paymentId(a.getPaymentId()).amount(a.getAmount()).accountRevision(a.getAccountRevision()).createdAt(a.getCreatedAt()).reasonCode(a.getReasonCode()).adminUserId(a.getAdminUserId()).balanceVersion(a.getBalanceVersion()).approvalDecision(a.getDecision()).build();
+   .paymentId(a.getPaymentId()).amount(a.getAmount()).accountRevision(a.getAccountRevision()).createdAt(a.getCreatedAt()).reasonCode(a.getReasonCode()).adminUserId(a.getAdminUserId()).balanceVersion(a.getBalanceVersion()).approvalDecision(a.getDecision())
+   .executionState(a.getKind()==FinancialApproval.Kind.PAYOUT && a.getDecision()==FinancialApproval.Decision.APPROVED && !payoutProviderAvailable
+     ?"PENDING_EXTERNAL_PROVIDER":"NOT_STARTED").build();
  }
  public static FinancialWorkflowResponse invoice(FinancialTaxInvoice i) {
   return builder().id(i.getId()).type("TAX_INVOICE").version(i.getVersion()).paymentId(i.getPaymentId()).providerId(i.getExternalId())

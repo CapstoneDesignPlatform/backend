@@ -20,6 +20,7 @@ public class InternalSettlementService {
  private final SettlementBalanceRepository balances;private final SettlementReviewRepository reviews;
  private final ExpertSettlementProfileRepository profiles;private final BusinessRegistrationInfoRepository business;
  private final InternalPayoutRepository payouts;private final FinancialSnapshotGuard snapshotGuard;
+ private final SettlementCompletionGuard completionGuard;
  private final FinancialWorkflowPersistenceService finance;private final EntityManager em;
  public record ProfileView(Long id,long revision,ExpertSettlementProfile.BusinessType business_type,
   Long business_info_id,boolean snapshot_current,boolean bank_verified,boolean kyc_verified){}
@@ -44,7 +45,7 @@ public class InternalSettlementService {
  }
  public List<ProfileView> profileHistory(Long user){role(user,"EXPERT",false);return profiles.findByExpertProfileIdOrderByRevisionDesc(expert(user)).stream().map(this::profileView).toList();}
  @Transactional public ReviewView request(Long admin,Long payment,String rawKey,InternalSettlementRequests.Request body){
-  role(admin,"ADMIN",true);var p=lock(payment);finance.settlement(admin,payment);
+  role(admin,"ADMIN",true);var p=lock(payment);completionGuard.requireCompleted(p.getAnnouncementId());finance.settlement(admin,payment);
   var b=balances.findByPaymentId(payment).orElseThrow(this::missing);em.refresh(b);
   var profile=latestLockedProfile(p.getExpertProfileId());
   String key=PaymentProcessingKeys.requestKey(rawKey);
@@ -58,17 +59,20 @@ public class InternalSettlementService {
   var created=SettlementReview.request(payment,key,b.getVersion(),profile.getRevision(),b.available(),admin);created.captureProfileReview(snapshotGuard.latestReviewId(profile,true));return view(reviews.saveAndFlush(created),b,profile);
  }
  @Transactional public ReviewView decide(Long admin,Long payment,Long review,InternalSettlementRequests.Decision body){
-  role(admin,"ADMIN",true);var p=lock(payment);var b=balances.findByPaymentId(payment).orElseThrow(this::missing);em.refresh(b);
+  role(admin,"ADMIN",true);var p=lock(payment);completionGuard.requireCompleted(p.getAnnouncementId());var b=balances.findByPaymentId(payment).orElseThrow(this::missing);em.refresh(b);
   var profile=latestLockedProfile(p.getExpertProfileId());
   var r=reviews.findById(review).orElseThrow(this::missing);em.refresh(r);
   if(!r.getPaymentId().equals(payment))throw missing();
   if(r.getState()!=SettlementReview.State.PENDING_APPROVAL){
-   if(r.getReviewerId().equals(admin) && r.getState()==body.decision() && Objects.equals(r.getReasonCode(),body.reasonCode()) && r.getVersion()==body.expectedVersion()+1)return view(r,b,profile);
+   if(r.getReviewerId().equals(admin) && r.getState()==body.decision() && Objects.equals(r.getReasonCode(),body.reasonCode()) && r.getVersion()==body.expectedVersion()+1){
+    finance.bridgeSettlementReviewApproval(admin,r);return view(r,b,profile);
+   }
    throw conflict();
   }
   if(r.getVersion()!=body.expectedVersion() || !r.current(b.getVersion(),profile.getRevision()) || !currentLocked(profile) || !snapshotGuard.profileApproved(profile,true) || !Objects.equals(r.getProfileReviewId(),snapshotGuard.latestReviewId(profile,true)))throw stale();
   if(body.decision()==SettlementReview.State.PENDING_APPROVAL)throw conflict();
   r.decide(admin,body.decision(),body.reasonCode());reviews.flush();
+  finance.bridgeSettlementReviewApproval(admin,r);
   return view(r,b,profile);
  }
  public List<ReviewView> history(Long admin,Long payment){
@@ -89,7 +93,14 @@ public class InternalSettlementService {
  private ReviewView view(SettlementReview r,SettlementBalance b,ExpertSettlementProfile profile){
   boolean latest=reviews.findByPaymentIdOrderByIdDesc(r.getPaymentId()).stream().findFirst().map(v->v.getId().equals(r.getId())).orElse(false);
   boolean current=latest && profile!=null && r.current(b.getVersion(),profile.getRevision()) && current(profile) && snapshotGuard.profileApproved(profile,false) && Objects.equals(r.getProfileReviewId(),snapshotGuard.latestReviewId(profile,false));
-  return new ReviewView(r.getId(),r.getPaymentId(),r.getState(),r.getAmount(),r.getBalanceVersion(),r.getProfileRevision(),r.getVersion(),current,"POLICY_HOLD",false,r.getReasonCode(),r.getReviewerId());
+  var canonical=finance.approvalForSettlementReview(r.getId()).orElse(null);
+  var state=canonical==null?r.getState():switch(canonical.getDecision()){
+   case APPROVED->SettlementReview.State.APPROVED;case HOLD->SettlementReview.State.ON_HOLD;case REJECTED->SettlementReview.State.REJECTED;
+  };
+  String execution=canonical!=null && canonical.getDecision()==FinancialApproval.Decision.APPROVED
+    ?(finance.payoutProviderAvailable()?"NOT_STARTED":"PENDING_EXTERNAL_PROVIDER"):"POLICY_HOLD";
+  return new ReviewView(r.getId(),r.getPaymentId(),state,r.getAmount(),r.getBalanceVersion(),r.getProfileRevision(),r.getVersion(),current,execution,false,
+    canonical==null?r.getReasonCode():canonical.getReasonCode(),canonical==null?r.getReviewerId():canonical.getAdminUserId());
  }
  private BalanceView balanceView(SettlementBalance b){return new BalanceView(b.getPaymentId(),b.getGross(),b.getRefunded(),b.platform(),b.expert(),b.getReserved(),b.getPaid(),b.getRecoverable(),b.available(),b.getVersion(),b.integralAllocation()?"ESTIMATED":"POLICY_HOLD",false);}
  private ProfileView profileView(ExpertSettlementProfile p){return new ProfileView(p.getId(),p.getRevision(),p.getBusinessType(),p.getBusinessInfoId(),current(p),false,false);}

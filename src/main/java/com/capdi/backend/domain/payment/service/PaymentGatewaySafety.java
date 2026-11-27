@@ -12,7 +12,9 @@ final class PaymentGatewaySafety {
                 && !gateway.supports(PaymentGateway.Capability.LOOKUP)
                 || id==null || id.environment()==null
                 || id.environment()==PaymentEnvironment.DISABLED || id.code()==null || !id.code().matches("[A-Z0-9_-]{1,40}")
-                || "DISABLED".equals(id.code()) || id.merchant()==null || !id.merchant().matches("[A-Za-z0-9._:-]{1,100}"))
+                || "DISABLED".equals(id.code()) || id.providerAccountId()==null
+                || !id.providerAccountId().matches("[A-Za-z0-9._:-]{1,200}")
+                || id.merchant()!=null && !id.merchant().matches("[A-Za-z0-9_-]{1,100}"))
             throw new CustomException(ErrorCode.PAYMENT_GATEWAY_DISABLED);
         return id;
     }

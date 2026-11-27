@@ -18,10 +18,13 @@ public class PaymentProcessingConfig {
             env.getProperty("payment.portone.sandbox-approved",Boolean.class,false),
             env.getProperty("payment.portone.environment","DISABLED"),
             env.getProperty("payment.portone.merchant-id"),env.getProperty("payment.portone.store-id"),
-            env.getProperty("payment.portone.channel-key"),env.getProperty("payment.portone.api-secret"),
-            env.getProperty("payment.portone.webhook-secret"),
+            env.getProperty("payment.portone.channel-key"),PortOneSecretFiles.resolve(env,"api-secret"),
+            PortOneSecretFiles.resolve(env,"webhook-secret"),
             java.time.Duration.ofMillis(env.getProperty("payment.portone.timeout-ms",Long.class,10000L)));
+        var proxy=com.capdi.backend.domain.payment.gateway.portone.PortOneProxyConfiguration
+            .selector(env,"payment.portone",settings.enabled());
+        settings.validateWebhookConfiguration(env.getProperty("payment.portone.webhook-enabled",Boolean.class,false));
         return new com.capdi.backend.domain.payment.gateway.portone.PortOneV2Gateway(settings,
-            new com.capdi.backend.domain.payment.gateway.portone.PortOneTransport.Jdk(),mapper.getIfAvailable(com.fasterxml.jackson.databind.ObjectMapper::new),clock);
+            new com.capdi.backend.domain.payment.gateway.portone.PortOneTransport.Jdk(proxy),mapper.getIfAvailable(com.fasterxml.jackson.databind.ObjectMapper::new),clock);
     }
 }

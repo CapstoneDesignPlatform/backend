@@ -24,6 +24,10 @@ class PortOneV2GatewayTest {
         return new PortOneSettings(enabled,approved,env,"merchant-test","store-test","channel-test",
                 "SYNTHETIC_API_SECRET",secret,Duration.ofSeconds(3));
     }
+    PortOneSettings settingsWithoutMerchant() {
+        return new PortOneSettings(true,true,"SANDBOX",null,"store-test","channel-test",
+                "SYNTHETIC_API_SECRET",secret,Duration.ofSeconds(3));
+    }
     @BeforeEach void setup(){
         gateway=new PortOneV2Gateway(settings(true,true,"SANDBOX"),(id,store,key,timeout)->{
             calls++;assertThat(id).isEqualTo("capdi_"+attempt);assertThat(store).isEqualTo("store-test");
@@ -35,20 +39,92 @@ class PortOneV2GatewayTest {
     String body(String status,String method){
         return "{\"id\":\"capdi_"+attempt+"\",\"transactionId\":\"transaction-test\",\"merchantId\":\"merchant-test\","
                 +"\"storeId\":\"store-test\",\"version\":\"V2\",\"status\":\""+status+"\",\"currency\":\"KRW\","
-                +"\"amount\":{\"total\":1000},\"method\":{\"type\":\""+method+"\"},"
+                +"\"amount\":{\"total\":1000},\"method\":"+methodJson(method)+","
                 +"\"channel\":{\"type\":\"TEST\",\"key\":\"channel-test\"}}";
+    }
+    String methodJson(String method) {
+        return switch(method) {
+            case "CARD" -> "{\"type\":\"PaymentMethodCard\"}";
+            case "TRANSFER" -> "{\"type\":\"PaymentMethodTransfer\"}";
+            case "VIRTUAL_ACCOUNT" -> "{\"type\":\"PaymentMethodVirtualAccount\"}";
+            default -> "{\"type\":\""+method+"\"}";
+        };
     }
     @Test void prepareIsLocalAndDoesNotInventProviderTransaction(){
         var result=gateway.prepare(reference);
         assertThat(result.state()).isEqualTo(State.PREPARED);assertThat(result.transactionId()).isNull();assertThat(calls).isZero();
     }
+    @Test void checkoutUsesPortOneTossV2CurrencyCode(){
+        var checkout=gateway.checkout(reference);
+        assertThat(checkout.getCurrency()).isEqualTo("KRW");
+        assertThat(checkout.getTotalAmount()).isEqualByComparingTo("1000");
+        assertThat(checkout.getPaymentId()).isEqualTo("capdi_"+attempt);
+        assertThat(calls).isZero();
+    }
     @Test void confirmationOnlyFetchesServerSnapshot(){
         assertThat(gateway.confirm(reference,"capdi_"+attempt).state()).isEqualTo(State.PAID);assertThat(calls).isEqualTo(1);
+    }
+    @Test void tosspayCardInsideEasyPayMatchesRequestedCardMethod() {
+        json=json.replace("\"method\":{\"type\":\"PaymentMethodCard\"}",
+                "\"method\":{\"type\":\"PaymentMethodEasyPay\",\"provider\":\"TOSSPAY\","
+                        +"\"easyPayMethod\":{\"type\":\"PaymentMethodCard\"}}");
+        assertThat(gateway.fetch(reference).state()).isEqualTo(State.PAID);
+    }
+    @Test void easyPayTransferDoesNotMatchRequestedCardMethod() {
+        json=json.replace("\"method\":{\"type\":\"PaymentMethodCard\"}",
+                "\"method\":{\"type\":\"PaymentMethodEasyPay\",\"provider\":\"TOSSPAY\","
+                        +"\"easyPayMethod\":{\"type\":\"PaymentMethodTransfer\"}}");
+        assertThatThrownBy(()->gateway.fetch(reference)).isInstanceOfSatisfying(GatewayException.class,
+                e->assertThat(e.failure()).isEqualTo(PaymentProcessingFailure.RESPONSE_MISMATCH));
+    }
+    @Test void missingConfiguredMerchantStillRequiresAndStoresValidV2ResponseMerchant() {
+        var unpinned=new PortOneV2Gateway(settingsWithoutMerchant(),(id,store,key,timeout)->{
+            calls++;return new PortOneTransport.Reply(200,json.getBytes(StandardCharsets.UTF_8));
+        },mapper,clock);
+        var unpinnedReference=new Reference(unpinned.identity(),"order-test",attempt,null,
+                new BigDecimal("1000"),"KRW",PaymentMethod.CARD);
+        var result=unpinned.fetch(unpinnedReference);
+        assertThat(result.identity().merchant()).isNull();
+        assertThat(result.providerMerchantId()).isEqualTo("merchant-test");
+        assertThat(result.identity().providerAccountId()).isEqualTo("provider:PORTONE_V2:store:store-test");
+        assertThat(calls).isEqualTo(1);
+    }
+    @ParameterizedTest @ValueSource(strings={"", "bad merchant"})
+    void absentOrMalformedResponseMerchantIsRejectedWhenNoExpectedMerchantIsConfigured(String value) {
+        var unpinned=new PortOneV2Gateway(settingsWithoutMerchant(),(id,store,key,timeout)->
+                new PortOneTransport.Reply(200,json.replace("merchant-test",value).getBytes(StandardCharsets.UTF_8)),mapper,clock);
+        var unpinnedReference=new Reference(unpinned.identity(),"order-test",attempt,null,
+                new BigDecimal("1000"),"KRW",PaymentMethod.CARD);
+        assertThatThrownBy(()->unpinned.fetch(unpinnedReference)).isInstanceOf(GatewayException.class);
+    }
+    @Test void missingResponseMerchantIsRejectedEvenWithoutAnExpectedPin() {
+        var unpinned=new PortOneV2Gateway(settingsWithoutMerchant(),(id,store,key,timeout)->
+                new PortOneTransport.Reply(200,json.replace("\"merchantId\":\"merchant-test\",","").getBytes(StandardCharsets.UTF_8)),mapper,clock);
+        var unpinnedReference=new Reference(unpinned.identity(),"order-test",attempt,null,
+                new BigDecimal("1000"),"KRW",PaymentMethod.CARD);
+        assertThatThrownBy(()->unpinned.fetch(unpinnedReference)).isInstanceOf(GatewayException.class);
+    }
+    @Test void storeBasedIdentityAcceptsLegacyAttemptOnlyForItsExactMerchantAndStore() {
+        var legacy=new Identity("PORTONE_V2","merchant-test",PaymentEnvironment.SANDBOX,
+                "provider:PORTONE_V2:legacy-merchant:merchant-test");
+        assertThat(gateway.isIdentityCompatible(legacy)).isTrue();
+        var wrongMerchant=new Identity("PORTONE_V2","other-merchant",PaymentEnvironment.SANDBOX,
+                "provider:PORTONE_V2:legacy-merchant:other-merchant");
+        assertThat(gateway.isIdentityCompatible(wrongMerchant)).isFalse();
+        var wrongStore=new Identity("PORTONE_V2",null,PaymentEnvironment.SANDBOX,
+                "provider:PORTONE_V2:store:other-store");
+        assertThat(gateway.isIdentityCompatible(wrongStore)).isFalse();
+    }
+    @Test void providerNotFoundIsUnresolvedAndCanBeRetriedWithoutTrustingWebhook() {
+        var missing=new PortOneV2Gateway(settings(true,true,"SANDBOX"),
+                (id,store,key,timeout)->new PortOneTransport.Reply(404,new byte[0]),mapper,clock);
+        assertThatThrownBy(()->missing.fetch(reference)).isInstanceOfSatisfying(GatewayException.class,
+                e->assertThat(e.failure()).isEqualTo(PaymentProcessingFailure.PROVIDER_ERROR));
     }
     @Test void browserReferenceCannotSelectAnotherPayment(){
         assertThatThrownBy(()->gateway.confirm(reference,"other")).isInstanceOf(GatewayException.class);assertThat(calls).isZero();
     }
-    @ParameterizedTest @ValueSource(strings={"merchant-test","store-test","channel-test","V2","KRW","1000","CARD","TEST"})
+    @ParameterizedTest @ValueSource(strings={"merchant-test","store-test","channel-test","V2","KRW","1000","PaymentMethodCard","TEST"})
     void everyBindingMustMatch(String change){
         json=json.replace(change,"WRONG");assertThatThrownBy(()->gateway.fetch(reference)).isInstanceOf(GatewayException.class);
         assertThat(calls).isEqualTo(1);

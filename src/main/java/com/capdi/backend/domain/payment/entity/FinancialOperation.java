@@ -14,8 +14,9 @@ public class FinancialOperation extends BaseTimeEntity {
     @Column(nullable=false,length=40,unique=true,updatable=false) private String reference;
     @Enumerated(EnumType.STRING) @Column(nullable=false,length=20,updatable=false) private FinancialGateway.Kind kind;
     @Column(name="provider_code",nullable=false,length=40,updatable=false) private String providerCode;
-    @Column(name="provider_merchant_id",nullable=false,length=100,updatable=false) private String providerMerchantId;
+    @Column(name="provider_merchant_id",length=100,updatable=false) private String providerMerchantId;
     @Column(name="provider_store_id",nullable=false,length=100,updatable=false) private String providerStoreId;
+    @Column(name="provider_account_id",nullable=false,length=200,updatable=false) private String providerAccountId;
     @Column(name="provider_environment",nullable=false,length=20,updatable=false) private String providerEnvironment;
     @Column(name="payment_id",updatable=false) private Long paymentId;
     @Column(name="refund_request_id",updatable=false) private Long refundRequestId;
@@ -39,7 +40,7 @@ public class FinancialOperation extends BaseTimeEntity {
     @Version @Column(nullable=false) private long version;
     public static FinancialOperation create(String reference,FinancialGateway.Kind kind,FinancialGateway.Identity identity,Long payment,Long refund,Long seller,Long account,
             Long approval,Long invoice,long sourceVersion,String key,String hash,String payload,Instant now) {
-        var o=new FinancialOperation();o.reference=reference;o.kind=kind;o.providerCode=identity.code();o.providerMerchantId=identity.merchant();o.providerStoreId=identity.store();o.providerEnvironment=identity.environment();o.paymentId=payment;
+        var o=new FinancialOperation();o.reference=reference;o.kind=kind;o.providerCode=identity.code();o.providerMerchantId=identity.merchant();o.providerStoreId=identity.store();o.providerAccountId=identity.providerAccountId();o.providerEnvironment=identity.environment();o.paymentId=payment;
         o.refundRequestId=refund;o.sellerDraftId=seller;o.accountId=account;o.approvalId=approval;o.invoiceId=invoice;
         o.sourceVersion=sourceVersion;o.keyHash=key;o.requestHash=hash;o.encryptedPayload=payload;
         o.state=State.READY;o.ntsState=FinancialGateway.NtsState.NOT_SENT;o.failureCode="NONE";o.nextLookupAt=now;
@@ -69,5 +70,5 @@ public class FinancialOperation extends BaseTimeEntity {
     public void block(String code,Instant now){state=State.BLOCKED;failureCode=code;release(now);}
     private void release(Instant now){executionToken=null;leaseUntil=null;nextLookupAt=now.plusSeconds(Math.min(3600,30L*(1L<<Math.min(lookupCount,7))));}
     public void manualReview(Instant now){if(submitClaimed && state==State.BLOCKED && !java.util.Set.of("STALE_APPROVAL","MANUAL_HOLD","REFUND_ADJUSTMENT").contains(failureCode)){state=State.UNKNOWN;lookupCount=0;nextLookupAt=now;}}
-    public FinancialGateway.Identity identity(){return new FinancialGateway.Identity(providerCode,providerMerchantId,providerStoreId,providerEnvironment);}
+    public FinancialGateway.Identity identity(){return new FinancialGateway.Identity(providerCode,providerMerchantId,providerStoreId,providerEnvironment,providerAccountId);}
 }

@@ -14,7 +14,14 @@ public final class PortOneFinancialGateway implements FinancialGateway {
   this.settings=settings;this.transport=transport;this.writes=Set.copyOf(writes);
   this.mapper=mapper.copy().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
  }
- public Identity identity(){return settings.enabled()?new Identity("PORTONE_V2",settings.merchantId(),settings.storeId(),"SANDBOX"):new Identity("DISABLED","DISABLED","DISABLED","DISABLED");}
+ public Identity identity(){return settings.enabled()?new Identity("PORTONE_V2",settings.merchantId(),settings.storeId(),"SANDBOX",
+   com.capdi.backend.domain.payment.gateway.ProviderAccountIdentity.store("PORTONE_V2",settings.storeId())):new Identity("DISABLED","DISABLED","DISABLED","DISABLED");}
+ public boolean isIdentityCompatible(Identity candidate){
+  return settings.enabled() && candidate!=null && "PORTONE_V2".equals(candidate.code())
+    && "SANDBOX".equals(candidate.environment()) && settings.storeId().equals(candidate.store())
+    && identity().providerAccountId().equals(candidate.providerAccountId())
+    && (settings.merchantId()==null || settings.merchantId().equals(candidate.merchant()));
+ }
  public boolean canSubmit(Kind kind){return settings.enabled() && kind!=Kind.PAYOUT && writes.contains(kind);}
  public boolean canLookup(Kind kind){return settings.enabled();}
  public Evidence submit(Command c){
@@ -50,8 +57,12 @@ public final class PortOneFinancialGateway implements FinancialGateway {
   String paymentId=id(text(p,"paymentId"));
   JsonNode payment=send("GET","/payments/"+paymentId,Map.of("storeId",settings.storeId()),null,c);
   if(payment==null)return unknown(c,null);
-  require(text(payment,"id").equals(paymentId) && text(payment,"storeId").equals(settings.storeId())
-    && text(payment,"merchantId").equals(settings.merchantId()) && "V2".equals(text(payment,"version"))
+  String responseMerchant=text(payment,"merchantId");
+  String expectedMerchant=settings.merchantId()!=null?settings.merchantId():c.identity()==null?null:c.identity().merchant();
+  require(com.capdi.backend.domain.payment.gateway.portone.PortOneSettings.identifier(responseMerchant)
+    && (expectedMerchant==null || expectedMerchant.equals(responseMerchant))
+    && text(payment,"id").equals(paymentId) && text(payment,"storeId").equals(settings.storeId())
+    && "V2".equals(text(payment,"version"))
     && "TEST".equals(text(payment.path("channel"),"type")) && settings.channelKey().equals(text(payment.path("channel"),"key"))
     && text(payment.path("method"),"type").equals(text(p,"method")) && "KRW".equals(text(payment,"currency"))
     && integer(payment.path("amount").path("total")).compareTo(p.path("gross").decimalValue())==0);

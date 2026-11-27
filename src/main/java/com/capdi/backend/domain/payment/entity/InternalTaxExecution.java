@@ -8,6 +8,12 @@ import java.util.UUID;
 public class InternalTaxExecution extends BaseTimeEntity {
  @Column(name="document_version",nullable=false,updatable=false) private long documentVersion;
  public void captureDocumentVersion(long version){documentVersion=version;}
+ @Column(name="financial_operation_id",unique=true) private Long financialOperationId;
+ public void linkFinancialOperation(Long operation){
+  if(operation==null || financialOperationId!=null && !financialOperationId.equals(operation))
+   throw new IllegalStateException("Canonical operation link is immutable");
+  financialOperationId=operation;
+ }
  public enum State { READY, REQUESTED, UNKNOWN, ISSUED, FAILED }
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
  @Column(name="document_id",nullable=false,unique=true,updatable=false) private Long documentId;

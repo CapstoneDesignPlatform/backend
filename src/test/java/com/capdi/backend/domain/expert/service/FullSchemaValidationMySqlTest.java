@@ -3,6 +3,10 @@ package com.capdi.backend.domain.expert.service;
 import com.capdi.backend.domain.expert.client.GoogleVisionOcrClient;
 import com.capdi.backend.domain.expert.client.NtsHttpTransport;
 import com.capdi.backend.domain.expert.entity.BusinessVerification;
+import com.capdi.backend.domain.payment.controller.PortOneWebhookController;
+import com.capdi.backend.domain.payment.gateway.FinancialGateway;
+import com.capdi.backend.domain.payment.gateway.PaymentGateway;
+import com.capdi.backend.domain.payment.service.PaymentWebhookConsumer;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManagerFactory;
 import org.flywaydb.core.Flyway;
@@ -13,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
@@ -62,12 +68,16 @@ class FullSchemaValidationMySqlTest {
     @Autowired EntityManagerFactory entityManagerFactory;
     @Autowired DataSource dataSource;
     @Autowired Flyway flyway;
+    @Autowired PaymentGateway paymentGateway;
+    @Autowired FinancialGateway financialGateway;
+    @Autowired TestRestTemplate http;
+    @LocalServerPort int port;
     @MockitoBean GoogleVisionOcrClient vision;
     @MockitoBean NtsHttpTransport nts;
 
-    @Test void fullApplicationContextValidatesEveryEntityAgainstFlywayV1ThroughV27() throws Exception {
+    @Test void fullApplicationContextValidatesEveryEntityAgainstFlywayV1ThroughV33() throws Exception {
         assertThat(context.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
-        assertThat(context.getBeansOfType(Repository.class)).hasSize(41);
+        assertThat(context.getBeansOfType(Repository.class)).hasSize(42);
         var scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(Entity.class));
         var discovered = scanner.findCandidateComponents("com.capdi.backend").stream()
@@ -76,13 +86,31 @@ class FullSchemaValidationMySqlTest {
                 .map(type -> type.getJavaType().getName()).toList();
         assertThat(discovered).isNotEmpty();assertThat(mapped).containsExactlyInAnyOrderElementsOf(discovered);
         assertThat(Arrays.stream(flyway.info().applied()).map(info -> info.getVersion().getVersion()).toList())
-                .containsExactlyElementsOf(IntStream.rangeClosed(1, 27).mapToObj(String::valueOf).toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, 33).mapToObj(String::valueOf).toList());
         flyway.validate();
         try (var connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo("capdi52_full_schema_test");
             assertThat(connection.getMetaData().getURL()).startsWith(MYSQL.getJdbcUrl());
         }
+        assertThat(paymentGateway.enabled()).isFalse();
+        assertThat(paymentGateway.supports(PaymentGateway.Capability.PREPARE)).isFalse();
+        assertThat(paymentGateway.supports(PaymentGateway.Capability.CONFIRM)).isFalse();
+        assertThat(paymentGateway.supports(PaymentGateway.Capability.LOOKUP)).isFalse();
+        for (var kind : FinancialGateway.Kind.values()) {
+            assertThat(financialGateway.canSubmit(kind)).isFalse();
+            assertThat(financialGateway.canLookup(kind)).isFalse();
+        }
+        assertThat(context.getBeansOfType(PaymentWebhookConsumer.class)).isEmpty();
+        assertThat(context.getBeansOfType(PortOneWebhookController.class)).isEmpty();
         verifyNoInteractions(vision, nts);
+    }
+
+    @Test void v30DisabledApplicationHealthIsUpWithoutProviderActivation() {
+        var response = http.getForEntity("http://127.0.0.1:" + port + "/api/actuator/health", String.class);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).contains("\"status\":\"UP\"");
+        assertThat(paymentGateway.enabled()).isFalse();
+        assertThat(context.getBeansOfType(PaymentWebhookConsumer.class)).isEmpty();
     }
 
     @Test void sha256HasCharJdbcMappingAndExistingChar64Column() throws Exception {

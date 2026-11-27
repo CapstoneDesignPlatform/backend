@@ -51,3 +51,4 @@ secrets/
 
 # Local issue notes and generated documentation
 /docs/
+/CAPDI_*.md
