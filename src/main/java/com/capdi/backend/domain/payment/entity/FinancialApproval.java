@@ -12,6 +12,8 @@ public class FinancialApproval extends BaseTimeEntity {
     @Column(name="admin_user_id",nullable=false,updatable=false) private Long adminUserId;
     @Column(name="payment_id",nullable=false,updatable=false) private Long paymentId;
     @Column(name="refund_request_id",updatable=false) private Long refundRequestId;
+    @Column(name="settlement_review_id",unique=true) private Long settlementReviewId;
+    @Column(name="approval_source",nullable=false,length=30) private String approvalSource="FINANCIAL_WORKFLOW";
     @Column(name="account_id",updatable=false) private Long accountId;
     @Column(name="balance_version",nullable=false,updatable=false) private long balanceVersion;
     @Column(name="account_revision",updatable=false) private Long accountRevision;
@@ -26,4 +28,12 @@ public class FinancialApproval extends BaseTimeEntity {
         a.accountId=account==null?null:account.getId();a.accountRevision=account==null?null:account.getAccountRevision();
         a.balanceVersion=balanceVersion;a.amount=amount;a.kind=kind;a.decision=decision;a.reasonCode=reason;return a;
     }
+    public void linkSettlementReview(Long reviewId) {
+        if (reviewId == null || kind != Kind.PAYOUT || refundRequestId != null
+                || settlementReviewId != null && !settlementReviewId.equals(reviewId)) {
+            throw new IllegalStateException("Settlement review link rejected");
+        }
+        settlementReviewId = reviewId;
+    }
+    public void markSettlementReviewSource() { approvalSource="SETTLEMENT_REVIEW"; }
 }

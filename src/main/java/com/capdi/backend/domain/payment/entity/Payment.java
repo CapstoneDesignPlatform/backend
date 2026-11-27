@@ -71,9 +71,9 @@ public class Payment extends BaseTimeEntity {
         payment.currency = "KRW";
         payment.method = method;
         // Allocation ratios only. Neither VAT nor PG charges are deducted.
-        payment.feePolicyVersion = "BASE_ALLOCATION_10_90_V1";
-        payment.platformFeeRate = new BigDecimal("0.1000");
-        payment.expertShareRate = new BigDecimal("0.9000");
+        payment.feePolicyVersion = SettlementPolicyV1.VERSION;
+        payment.platformFeeRate = SettlementPolicyV1.PLATFORM_RATE;
+        payment.expertShareRate = SettlementPolicyV1.EXPERT_RATE;
         payment.status = PaymentStatus.CREATED;
         return payment;
     }

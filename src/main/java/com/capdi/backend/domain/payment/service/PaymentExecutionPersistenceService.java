@@ -65,7 +65,8 @@ public class PaymentExecutionPersistenceService {
         }
         if(!p.ownsAttempt(a.getId()) || p.getStatus()!=PaymentStatus.PROCESSING
                 || a.getStatus()!=PaymentAttemptStatus.PREPARED || a.busy(clock.instant()))throw conflict();
-        if(!a.reference().identity().equals(PaymentGatewaySafety.require(gateway,PaymentGateway.Capability.CONFIRM)))throw conflict();
+        PaymentGatewaySafety.require(gateway,PaymentGateway.Capability.CONFIRM);
+        if(!gateway.isIdentityCompatible(a.reference().identity()))throw conflict();
         a.claim(clock.instant());a.confirming(hash);job(a).pending(a.getLeaseUntil(),PaymentProcessingFailure.NONE);
         return execution(user,p,a,true);
     }
@@ -77,7 +78,8 @@ public class PaymentExecutionPersistenceService {
         if(p.getStatus()==PaymentStatus.FAILED || p.getStatus()==PaymentStatus.CANCELED)
             return execution(user,p,a,false);
         if(a.busy(clock.instant()))throw conflict();
-        if(!a.reference().identity().equals(PaymentGatewaySafety.require(gateway,PaymentGateway.Capability.LOOKUP)))throw conflict();
+        PaymentGatewaySafety.require(gateway,PaymentGateway.Capability.LOOKUP);
+        if(!gateway.isIdentityCompatible(a.reference().identity()))throw conflict();
         a.claim(clock.instant());job(a).running();
         return execution(user,p,a,true);
     }

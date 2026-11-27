@@ -2,6 +2,8 @@ package com.capdi.backend.domain.payment.service;
 
 import com.capdi.backend.domain.payment.gateway.PaymentGateway;
 import com.capdi.backend.domain.payment.entity.PaymentAttemptStatus;
+import com.capdi.backend.domain.payment.entity.PaymentProcessingFailure;
+import com.capdi.backend.domain.payment.entity.PaymentWebhookEvent;
 import com.capdi.backend.domain.payment.util.PaymentProcessingKeys;
 import com.capdi.backend.global.exception.*;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ public class PaymentWebhookService {
     private final PaymentGateway gateway;
     private final PaymentWebhookPersistenceService persistence;
     private final PaymentExecutionService execution;
+    private final PaymentWebhookRetryPolicy retryPolicy;
 
     public PaymentWebhookPersistenceService.Receipt receive(Map<String,List<String>> headers,byte[] body) {
         var identity=PaymentGatewaySafety.require(gateway,PaymentGateway.Capability.VERIFY_WEBHOOK);
@@ -38,13 +41,28 @@ public class PaymentWebhookService {
     public void process(Long eventId) {
         var claim=persistence.claim(eventId);
         if(!claim.run())return;
-        boolean done=false;
+        PaymentWebhookEvent.Outcome outcome;
+        String failureCode=null;
         try {
             var result=execution.reconcileInternal(claim.attempt());
-            done=result.getStatus()!=PaymentAttemptStatus.UNKNOWN && result.getFailure()==com.capdi.backend.domain.payment.entity.PaymentProcessingFailure.NONE;
+            PaymentProcessingFailure failure=result.getFailure();
+            if(result.getStatus()!=PaymentAttemptStatus.UNKNOWN && failure==PaymentProcessingFailure.NONE) {
+                outcome=PaymentWebhookEvent.Outcome.SUCCESS;
+            } else if (failure==null || failure==PaymentProcessingFailure.NONE) {
+                outcome=PaymentWebhookEvent.Outcome.TRANSIENT_FAILURE;
+                failureCode="RECONCILIATION_PENDING";
+            } else {
+                var classification=retryPolicy.classify(failure);
+                outcome=classification==PaymentWebhookRetryPolicy.PaymentWebhookEventFailure.TRANSIENT
+                        ?PaymentWebhookEvent.Outcome.TRANSIENT_FAILURE:PaymentWebhookEvent.Outcome.PERMANENT_FAILURE;
+                failureCode=failure.name();
+            }
         } catch(RuntimeException ignored) {
-            // Preserve the inbox; a later explicitly invoked worker can retry LOOKUP, never a charge.
-        } finally {persistence.finish(claim,done);}
+            // Persist only a fixed safe failure code. Exception messages/provider bodies may contain secrets.
+            outcome=PaymentWebhookEvent.Outcome.TRANSIENT_FAILURE;
+            failureCode=PaymentProcessingFailure.PROCESS_INTERRUPTED.name();
+        }
+        persistence.finish(claim,outcome,failureCode);
     }
     private CustomException invalid() {return new CustomException(ErrorCode.PAYMENT_EVENT_INVALID);}
 }

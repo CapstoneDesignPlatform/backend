@@ -37,8 +37,9 @@ public class FinancialWorkflowConfig {
    e.getProperty("financial.portone.sandbox-approved",Boolean.class,false),e.getProperty("financial.portone.environment","DISABLED"),
    e.getProperty("financial.portone.merchant-id"),e.getProperty("financial.portone.store-id"),e.getProperty("financial.portone.channel-key"),
    e.getProperty("financial.portone.api-secret"),null,java.time.Duration.ofSeconds(10));
+  var proxy=PortOneProxyConfiguration.selector(e,"financial.portone",settings.enabled());
   Set<FinancialGateway.Kind> writes=EnumSet.noneOf(FinancialGateway.Kind.class);
   for(var k:FinancialGateway.Kind.values())if(e.getProperty("financial.portone."+k.name().toLowerCase(Locale.ROOT)+"-enabled",Boolean.class,false))writes.add(k);
-  return new PortOneFinancialGateway(settings,new PortOneFinancialTransport.Jdk(settings),mapper,writes);
+  return new PortOneFinancialGateway(settings,new PortOneFinancialTransport.Jdk(settings,proxy),mapper,writes);
  }
 }

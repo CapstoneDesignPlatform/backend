@@ -10,11 +10,14 @@ public interface PortOneFinancialTransport {
  record Reply(int status,byte[] body){@Override public String toString(){return "FinancialReply[REDACTED]";}}
  Reply send(String method,String path,Map<String,String> query,JsonNode body,String operationKey);
  final class Jdk implements PortOneFinancialTransport {
-  private final PortOneSettings settings;
-  private final HttpClient client=HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
-  public Jdk(PortOneSettings settings){this.settings=settings;}
+  private final PortOneSettings settings; private final PortOneProxySelector proxySelector; private final HttpClient client;
+  public Jdk(PortOneSettings settings){this(settings,null);}
+  public Jdk(PortOneSettings settings,PortOneProxySelector proxySelector){this.settings=settings;this.proxySelector=proxySelector;
+   var builder=HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER);
+   if(proxySelector!=null)builder.proxy(proxySelector);this.client=builder.build();}
   public Reply send(String method,String path,Map<String,String> query,JsonNode body,String operationKey){
    if(!settings.enabled())throw new FinancialGatewayException(DISABLED);
+   if(proxySelector==null)throw new FinancialGatewayException(NETWORK);
    if(!Set.of("GET","POST","PATCH").contains(method) || !path.matches("/[A-Za-z0-9_./-]{1,250}") || path.contains(".."))throw new FinancialGatewayException(RESPONSE_MISMATCH);
    String q=query.entrySet().stream().map(e->URLEncoder.encode(e.getKey(),StandardCharsets.UTF_8)+"="+URLEncoder.encode(e.getValue(),StandardCharsets.UTF_8))
      .collect(java.util.stream.Collectors.joining("&"));

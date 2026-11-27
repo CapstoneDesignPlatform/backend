@@ -32,6 +32,10 @@ public class FinancialWorkflowPersistenceService {
  private final BillingPartySnapshotRepository parties;private final FinancialTaxInvoiceRepository invoices;
  private final FinancialOperationAuditRepository audits;private final BusinessRegistrationInfoRepository business;
  private final ExpertFileRepository files;private final BusinessInputValidator validator;
+ private final InternalTaxDocumentRepository taxDocuments;private final SettlementProfileReviewRepository profileReviews;
+ private final ExpertSettlementProfileRepository settlementProfiles;private final FinancialSnapshotGuard snapshotGuard;
+ private final SettlementCompletionGuard completionGuard;
+ private final InternalPayoutRepository internalPayouts;
  private final FinancialVault vault;private final FinancialPolicy policy;private final FinancialGateway gateway;
  private final ObjectMapper mapper;private final EntityManager em;private final Clock clock;
  public record Run(Long operation,String token,FinancialGateway.Command command,String externalId,boolean execute) {}
@@ -83,7 +87,8 @@ public class FinancialWorkflowPersistenceService {
  }
  @Transactional
  public FinancialWorkflowResponse settlement(Long admin,Long payment) {
-  role(admin,"ADMIN",true);var p=paid(payment);return FinancialWorkflowResponse.balance(balance(p));
+  role(admin,"ADMIN",true);var p=paid(payment);completionGuard.requireCompleted(p.getAnnouncementId());
+  return FinancialWorkflowResponse.balance(balance(p));
  }
  public FinancialWorkflowResponse readBalance(Long admin,Long payment) {
   role(admin,"ADMIN",false);return FinancialWorkflowResponse.balance(balances.findByPaymentId(payment).orElseThrow(this::missing));
@@ -121,7 +126,22 @@ public class FinancialWorkflowPersistenceService {
  }
  @Transactional
  public FinancialWorkflowResponse decidePayout(Long admin,Long payment,FinancialWorkflowRequests.PayoutDecision request) {
-  role(admin,"ADMIN",true);var p=paid(payment);var b=balance(p);
+  role(admin,"ADMIN",true);var p=paid(payment);completionGuard.requireCompleted(p.getAnnouncementId());var b=balance(p);
+  if(legacyPayoutInFlightOrPaid(payment))throw conflict();
+  var prior=approvals.findByPaymentIdOrderByIdDesc(payment).stream().filter(x->x.getKind()==FinancialApproval.Kind.PAYOUT).findFirst();
+  if(prior.isPresent() && prior.get().getDecision()==FinancialApproval.Decision.APPROVED) {
+   var existing=prior.get();
+   var priorOperation=operations.findByApprovalId(existing.getId());
+   boolean retryAfterDefinitiveFailure=priorOperation.isPresent() && priorOperation.get().getState()==FinancialOperation.State.FAILED;
+   if(request.decision()==FinancialApproval.Decision.APPROVED
+      && existing.getBalanceVersion()==request.expectedBalanceVersion()
+      && Objects.equals(existing.getAccountId(),request.accountId())
+      && Objects.equals(existing.getAccountRevision(),request.expectedAccountRevision())
+      && existing.getAmount().compareTo(request.amount())==0
+      && existing.getReasonCode().equals(request.reason()) && !retryAfterDefinitiveFailure)
+     return FinancialWorkflowResponse.approval(existing,gateway.canSubmit(FinancialGateway.Kind.PAYOUT));
+   if(!retryAfterDefinitiveFailure)throw conflict();
+  }
   if(b.getVersion()!=request.expectedBalanceVersion())throw stale();
   ExpertSettlementAccount a=null;
   if(request.accountId()!=null){
@@ -133,17 +153,74 @@ public class FinancialWorkflowPersistenceService {
   if(request.decision()==FinancialApproval.Decision.APPROVED) {
    if(a==null)throw invalid();
    if(!operations.findByPaymentIdAndKindAndStateIn(payment,FinancialGateway.Kind.PAYOUT,List.of(FinancialOperation.State.READY,FinancialOperation.State.REQUESTED,FinancialOperation.State.PENDING,FinancialOperation.State.UNKNOWN,FinancialOperation.State.BLOCKED)).stream().noneMatch(o->o.getState()==FinancialOperation.State.READY || o.isSubmitClaimed()))throw conflict();
-   review(FinancialGateway.Kind.PAYOUT);payoutEligible(p,b,a);
+   payoutEligible(p,b,a);
    if(request.amount().compareTo(b.available())>0)throw conflict();
   }
   b.review();balances.flush();
   var approval=approvals.saveAndFlush(FinancialApproval.create(admin,payment,null,a,b.getVersion(),request.amount(),
     FinancialApproval.Kind.PAYOUT,request.decision(),request.reason()));
-  return FinancialWorkflowResponse.approval(approval);
+  return FinancialWorkflowResponse.approval(approval,gateway.canSubmit(FinancialGateway.Kind.PAYOUT));
+ }
+ /** Canonicalizes an approval made through the legacy settlement-review endpoint. */
+ @Transactional
+ public FinancialApproval bridgeSettlementReviewApproval(Long admin,SettlementReview review) {
+  role(admin,"ADMIN",true);
+  var p=paid(review.getPaymentId());completionGuard.requireCompleted(p.getAnnouncementId());
+  var b=balance(p);
+  if (review.getReviewerId()==null || !review.getReviewerId().equals(admin)
+      || b.getVersion()!=review.getBalanceVersion()) throw stale();
+  var decision=switch(review.getState()) {
+   case APPROVED -> FinancialApproval.Decision.APPROVED;
+   case ON_HOLD -> FinancialApproval.Decision.HOLD;
+   case REJECTED -> FinancialApproval.Decision.REJECTED;
+   default -> throw conflict();
+  };
+  var linked=approvals.findBySettlementReviewId(review.getId());
+  if(linked.isPresent()) {
+   var existing=linked.get();
+   if(!matchesReviewApproval(existing,review,decision)) throw conflict();
+   return existing;
+  }
+  ExpertSettlementAccount account=null;
+  if(decision==FinancialApproval.Decision.APPROVED) {
+   account=currentAccount(p.getExpertProfileId());
+   if(account.getState()!=ExpertSettlementAccount.State.VERIFIED || !account.isKycVerified()
+      || review.getAmount().compareTo(b.available())>0) throw conflict();
+   payoutEligible(p,b,account);
+   if(legacyPayoutInFlightOrPaid(review.getPaymentId())
+      || operations.findByPaymentIdAndKindAndStateIn(review.getPaymentId(),FinancialGateway.Kind.PAYOUT,
+         List.of(FinancialOperation.State.READY,FinancialOperation.State.REQUESTED,FinancialOperation.State.PENDING,
+                 FinancialOperation.State.UNKNOWN,FinancialOperation.State.SUCCEEDED,FinancialOperation.State.BLOCKED))
+         .stream().anyMatch(o->o.getState()!=FinancialOperation.State.BLOCKED || o.isSubmitClaimed())) throw conflict();
+  }
+  final ExpertSettlementAccount pinnedAccount=account;
+  var candidates=approvals.findByPaymentIdOrderByIdDesc(review.getPaymentId()).stream()
+   .filter(a->a.getKind()==FinancialApproval.Kind.PAYOUT && a.getSettlementReviewId()==null
+     && a.getAdminUserId().equals(review.getReviewerId()) && a.getBalanceVersion()==review.getBalanceVersion()
+     && a.getAmount().compareTo(review.getAmount())==0 && a.getDecision()==decision
+     && a.getReasonCode().equals(review.getReasonCode())
+     && (decision!=FinancialApproval.Decision.APPROVED || pinnedAccount!=null
+         && Objects.equals(a.getAccountId(),pinnedAccount.getId()) && Objects.equals(a.getAccountRevision(),pinnedAccount.getAccountRevision())))
+   .toList();
+  if(candidates.size()>1) throw conflict();
+  FinancialApproval approval;
+  if(candidates.size()==1) approval=candidates.getFirst();
+  else approval=FinancialApproval.create(admin,review.getPaymentId(),null,account,
+       review.getBalanceVersion(),review.getAmount(),FinancialApproval.Kind.PAYOUT,decision,review.getReasonCode());
+  if(candidates.isEmpty()) approval.markSettlementReviewSource();
+  approval.linkSettlementReview(review.getId());
+  return approvals.saveAndFlush(approval);
+ }
+ private boolean matchesReviewApproval(FinancialApproval approval,SettlementReview review,FinancialApproval.Decision decision) {
+  return approval.getKind()==FinancialApproval.Kind.PAYOUT && approval.getPaymentId().equals(review.getPaymentId())
+   && approval.getSettlementReviewId().equals(review.getId()) && approval.getDecision()==decision
+   && approval.getAmount().compareTo(review.getAmount())==0 && approval.getBalanceVersion()==review.getBalanceVersion()
+   && Objects.equals(approval.getAdminUserId(),review.getReviewerId()) && Objects.equals(approval.getReasonCode(),review.getReasonCode());
  }
  @Transactional
  public FinancialWorkflowResponse preparePayout(Long admin,Long payment,Long approvalId,String rawKey) {
-  role(admin,"ADMIN",true);review(FinancialGateway.Kind.PAYOUT);var p=paid(payment);var b=balance(p);
+  role(admin,"ADMIN",true);var p=paid(payment);completionGuard.requireCompleted(p.getAnnouncementId());var b=balance(p);
+  if(legacyPayoutInFlightOrPaid(payment))throw conflict();
   var approval=approvals.findById(approvalId).orElseThrow(this::missing);
   String key=key("payout:"+payment,rawKey);
   var old=operations.findByApprovalId(approvalId);
@@ -154,7 +231,13 @@ public class FinancialWorkflowPersistenceService {
     || !latest.get().getId().equals(approvalId) || approval.getDecision()!=FinancialApproval.Decision.APPROVED
     || approval.getBalanceVersion()!=b.getVersion() || !a.getId().equals(approval.getAccountId())
     || a.getAccountRevision()!=approval.getAccountRevision())throw stale();
-  payoutEligible(p,b,a);b.reserve(approval.getAmount());balances.flush();
+  payoutEligible(p,b,a);
+  if(approval.getAmount().compareTo(b.available())>0)throw conflict();
+  // A pending external provider is represented by the approved decision only. Do not reserve
+  // the balance or fabricate an operation until a reviewed provider can actually submit PAYOUT.
+  if(!gateway.canSubmit(FinancialGateway.Kind.PAYOUT))
+   return FinancialWorkflowResponse.approval(approval,false);
+  review(FinancialGateway.Kind.PAYOUT);b.reserve(approval.getAmount());balances.flush();
   ObjectNode payload=paymentPayload(p);payload.put("amount",approval.getAmount());payload.put("balanceVersion",b.getVersion());
   payload.put("accountRevision",a.getAccountRevision());payload.put("partnerId",registeredPartner(p.getExpertProfileId(),a));
   payload.set("account",parse(vault.open("account:"+a.getExpertProfileId()+":"+a.getAccountRevision(),a.getEncryptedDetails())));
@@ -177,7 +260,7 @@ public class FinancialWorkflowPersistenceService {
  public FinancialWorkflowResponse prepareInvoice(Long admin,Long draftId,FinancialWorkflowRequests.Invoice request) {
   role(admin,"ADMIN",true);review(FinancialGateway.Kind.TAX_INVOICE);
   var d=drafts.findById(draftId).orElseThrow(this::missing);
-  var settlement=settlementDrafts.findById(d.getSettlementId()).orElseThrow(this::missing);var p=paid(settlement.getPaymentId());refresh(d);
+  var settlement=settlementDrafts.findById(d.getSettlementId()).orElseThrow(this::missing);var p=paid(settlement.getPaymentId());completionGuard.requireCompleted(p.getAnnouncementId());refresh(d);
   var supplier=parties.findById(request.supplierSnapshotId()).orElseThrow(this::missing);
   var recipient=parties.findById(request.recipientSnapshotId()).orElseThrow(this::missing);partyRoles(p,d,supplier,recipient);
   var sup=party(supplier);if(!policy.authorizedSupplierNumbers().contains(sup.path("brn").asText()))throw unavailable();
@@ -215,11 +298,40 @@ public class FinancialWorkflowPersistenceService {
  }
  @Transactional
  public FinancialWorkflowResponse prepareInvoiceOperation(Long admin,Long invoiceId,String rawKey) {
-  role(admin,"ADMIN",true);review(FinancialGateway.Kind.TAX_INVOICE);
-  var invoice=invoices.findById(invoiceId).orElseThrow(this::missing);var p=paid(invoice.getPaymentId());refresh(invoice);
-  try{invoice.claimExecutionOwner("LEGACY");}catch(IllegalStateException ex){throw conflict();}
-  String key=key("invoice:"+invoiceId,rawKey);var old=operations.findByInvoiceId(invoiceId);
-  if(old.isPresent()){if(!old.get().getKeyHash().equals(key))throw conflict();return FinancialWorkflowResponse.operation(old.get());}
+  role(admin,"ADMIN",true);
+  var invoice=invoices.findById(invoiceId).orElseThrow(this::missing);
+  var old=operations.findByInvoiceId(invoiceId);
+  if(old.isPresent()) {
+   var operation=old.get();
+   if(invoice.getInternalDocumentId()==null)throw conflict();
+   var linkedDocument=taxDocuments.findById(invoice.getInternalDocumentId()).orElseThrow(this::missing);
+   if(operation.getKind()!=FinancialGateway.Kind.TAX_INVOICE || !Objects.equals(operation.getPaymentId(),invoice.getPaymentId())
+      || !Objects.equals(operation.getInvoiceId(),invoiceId) || !Objects.equals(linkedDocument.getFinancialInvoiceId(),invoiceId)
+      || !Objects.equals(linkedDocument.getPaymentId(),invoice.getPaymentId()))throw conflict();
+   return FinancialWorkflowResponse.operation(operation);
+  }
+  review(FinancialGateway.Kind.TAX_INVOICE);
+  var p=paid(invoice.getPaymentId());refresh(invoice);
+  if(invoice.getInternalDocumentId()==null)throw conflict();
+  var document=taxDocuments.findById(invoice.getInternalDocumentId()).orElseThrow(this::missing);
+  em.refresh(document);
+  if(!Objects.equals(document.getFinancialInvoiceId(),invoice.getId()) || !Objects.equals(document.getPaymentId(),p.getId())
+      || document.getState()!=InternalTaxDocument.State.APPROVED || document.isSuperseded()
+      || document.getSupply().compareTo(invoice.getSupply())!=0 || document.getVat().compareTo(invoice.getVat())!=0
+      || document.getTotal().compareTo(invoice.getTotal())!=0 || document.getKind()!=findTaxDraftKind(invoice.getDraftId()))throw conflict();
+  var currentBalance=balances.findByPaymentId(p.getId()).orElseThrow(this::missing);em.refresh(currentBalance);
+  if(document.getBalanceVersion()==null || currentBalance.getVersion()!=document.getBalanceVersion()
+      || document.getProfileId()==null)throw conflict();
+  var profile=settlementProfiles.findById(document.getProfileId()).orElseThrow(this::missing);em.refresh(profile);
+  if(!snapshotGuard.profileApproved(profile,true) || !Objects.equals(document.getProfileReviewId(),snapshotGuard.latestReviewId(profile,true)))throw conflict();
+  var latestProfile=settlementProfiles.findFirstByExpertProfileIdOrderByRevisionDesc(p.getExpertProfileId()).orElseThrow(this::missing);
+  if(!latestProfile.getId().equals(profile.getId()))throw conflict();
+  if(!em.createNativeQuery("SELECT id FROM payment_refund_requests WHERE payment_id=? AND state NOT IN ('FAILED','REJECTED','SUCCEEDED') FOR UPDATE")
+      .setParameter(1,p.getId()).getResultList().isEmpty())throw conflict();
+  BigDecimal expected=document.getKind()==PaymentTaxInvoiceDraft.Kind.EXPERT_TO_CLIENT?currentBalance.net():currentBalance.platform();
+  if(document.getOriginalDocumentId()==null && invoice.getTotal().compareTo(expected)!=0)throw conflict();
+  try{invoice.claimExecutionOwner("FINANCIAL_OPERATION");}catch(IllegalStateException ex){throw conflict();}
+  String key=key("invoice:"+invoiceId,rawKey);
   ObjectNode body=mapper.createObjectNode();body.put("amount",invoice.getTotal());body.put("currency","KRW");
   body.put("supply",invoice.getSupply());body.put("vat",invoice.getVat());body.put("taxation",invoice.getTaxation().name());
   body.put("writeDate",invoice.getWriteDate().toString());body.set("supplier",party(parties.findById(invoice.getSupplierSnapshotId()).orElseThrow(this::missing)));
@@ -233,14 +345,18 @@ public class FinancialWorkflowPersistenceService {
     invoice.getVersion(),key,body));
  }
 
+ private PaymentTaxInvoiceDraft.Kind findTaxDraftKind(Long draftId) {
+  return drafts.findById(draftId).orElseThrow(this::missing).getKind();
+ }
+
  @Transactional(propagation=Propagation.REQUIRES_NEW)
  public Run claimAdmin(Long admin,Long id,boolean lookup){role(admin,"ADMIN",false);return claim(id,lookup,admin);}
  @Transactional(propagation=Propagation.REQUIRES_NEW)
  public Run claimWorker(Long id){return claim(id,true,null);}
  private Run claim(Long id,boolean lookup,Long actor) {
   var o=lockOperation(id);
-  if(o.getKind()==FinancialGateway.Kind.TAX_INVOICE){var invoice=invoices.findById(o.getInvoiceId()).orElseThrow(this::missing);refresh(invoice);try{invoice.claimExecutionOwner("LEGACY");}catch(IllegalStateException ex){throw conflict();}}
-  if(!o.identity().equals(gateway.identity())){
+  if(o.getKind()==FinancialGateway.Kind.TAX_INVOICE){var invoice=invoices.findById(o.getInvoiceId()).orElseThrow(this::missing);refresh(invoice);try{invoice.claimExecutionOwner("FINANCIAL_OPERATION");}catch(IllegalStateException ex){throw conflict();}}
+  if(!gateway.isIdentityCompatible(o.identity())){
    if(o.getState()==FinancialOperation.State.READY)cancelReady(o,"PROVIDER_IDENTITY_CHANGED");
    else o.block("PROVIDER_IDENTITY_CHANGED",clock.instant());
    audit(o,actor,"PROVIDER_CHANGED");return new Run(id,null,null,o.getExternalId(),false);
@@ -257,7 +373,7 @@ public class FinancialWorkflowPersistenceService {
   operations.flush();audit(o,actor,lookup?"LOOKUP_CLAIM":"SUBMIT_CLAIM");
   String raw=vault.open("operation:"+o.getReference(),o.getEncryptedPayload());
   if(!vault.matchesFingerprint(o.getEncryptedPayload(),raw,o.getRequestHash()))throw conflict();
-  return new Run(id,token,new FinancialGateway.Command(o.getReference(),o.getKind(),parse(raw)),o.getExternalId(),true);
+  return new Run(id,token,new FinancialGateway.Command(o.getReference(),o.getKind(),parse(raw),o.identity()),o.getExternalId(),true);
  }
  @Transactional(propagation=Propagation.REQUIRES_NEW)
  public FinancialWorkflowResponse complete(Run run,FinancialGateway.Evidence proof) {
@@ -304,6 +420,7 @@ public class FinancialWorkflowPersistenceService {
   o.manualReview(clock.instant());audit(o,admin,"MANUAL_LOOKUP");return FinancialWorkflowResponse.operation(o);
  }
  public List<Long> due(){return operations.findDue(clock.instant(),org.springframework.data.domain.PageRequest.of(0,50,org.springframework.data.domain.Sort.by("nextLookupAt").ascending().and(org.springframework.data.domain.Sort.by("id"))));}
+ public List<Long> due(FinancialGateway.Kind kind){return operations.findDueByKind(kind,clock.instant(),org.springframework.data.domain.PageRequest.of(0,50,org.springframework.data.domain.Sort.by("nextLookupAt").ascending().and(org.springframework.data.domain.Sort.by("id"))));}
  public FinancialWorkflowResponse readAdmin(Long admin,Long id){role(admin,"ADMIN",false);return FinancialWorkflowResponse.operation(operations.findById(id).orElseThrow(this::missing));}
  public FinancialWorkflowResponse readPartner(Long user,Long id){
   role(user,"EXPERT",false);var o=operations.findById(id).orElseThrow(this::missing);
@@ -314,6 +431,10 @@ public class FinancialWorkflowPersistenceService {
  }
  public FinancialWorkflowResponse readInvoice(Long admin,Long id){role(admin,"ADMIN",false);return FinancialWorkflowResponse.invoice(invoices.findById(id).orElseThrow(this::missing));}
  public List<FinancialApproval> approvalHistory(Long admin,Long payment){role(admin,"ADMIN",false);payments.findById(payment).orElseThrow(this::missing);return approvals.findByPaymentIdOrderByIdDesc(payment);}
+ public Optional<FinancialApproval> approvalForSettlementReview(Long reviewId) {
+  return approvals.findBySettlementReviewId(reviewId);
+ }
+ public boolean payoutProviderAvailable() { return gateway.canSubmit(FinancialGateway.Kind.PAYOUT); }
 
  public List<FinancialWorkflowResponse> accountHistory(Long user){
   role(user,"EXPERT",false);return accounts.findByExpertProfileIdOrderByAccountRevisionDesc(profile(user)).stream().map(FinancialWorkflowResponse::account).toList();
@@ -415,7 +536,10 @@ public class FinancialWorkflowPersistenceService {
  private void payoutEligible(Payment p,SettlementBalance b,ExpertSettlementAccount a) {
   if(b.isHeld() || !b.integralAllocation() || a.getState()!=ExpertSettlementAccount.State.VERIFIED || !a.isKycVerified()
     || refunds.findByPaymentId(p.getId()).stream().anyMatch(r->r.getState()!=PaymentRefundRequest.State.FAILED && r.getState()!=PaymentRefundRequest.State.SUCCEEDED && r.getState()!=PaymentRefundRequest.State.REJECTED))throw conflict();
-  registeredPartner(p.getExpertProfileId(),a);
+ }
+ private boolean legacyPayoutInFlightOrPaid(Long payment) {
+  return internalPayouts.findByPaymentIdOrderByIdDesc(payment).stream().anyMatch(x->x.getState()!=InternalPayout.State.FAILED
+    && x.getState()!=InternalPayout.State.CANCELED);
  }
  private String registeredPartner(Long expert,ExpertSettlementAccount account) {
   var seller=sellers.findByExpertProfileId(expert).orElseThrow(this::missing);refresh(seller);confirmed(seller,expert);

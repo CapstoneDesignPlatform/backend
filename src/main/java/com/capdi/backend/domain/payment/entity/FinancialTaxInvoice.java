@@ -11,6 +11,12 @@ public class FinancialTaxInvoice extends BaseTimeEntity {
     @Column(name="execution_owner",length=20) private String executionOwner;
     public void claimExecutionOwner(String owner){if(executionOwner!=null && !executionOwner.equals(owner))throw new IllegalStateException("Invoice already owned");executionOwner=owner;}
     @Column(name="provider_environment",length=30) private String providerEnvironment;
+    @Column(name="internal_document_id",unique=true) private Long internalDocumentId;
+    public void linkInternalDocument(Long document){
+        if(document==null || internalDocumentId!=null && !internalDocumentId.equals(document))
+            throw new IllegalStateException("Tax document link is immutable");
+        internalDocumentId=document;
+    }
     public void bindEnvironment(String environment){if(providerEnvironment!=null && !providerEnvironment.equals(environment))throw new IllegalStateException("Provider environment changed");providerEnvironment=environment;}
     public enum Taxation { TAXABLE, ZERO_RATED, FREE }
     public enum Modification { CORRECTION_OF_ENTRY_ERRORS, CHANGE_IN_SUPPLY_COST, RETURN, CANCELLATION_OF_CONTRACT, DUPLICATE_ISSUANCE_DUE_TO_ERROR }
